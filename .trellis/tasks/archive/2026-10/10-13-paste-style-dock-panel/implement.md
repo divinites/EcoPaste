@@ -52,8 +52,8 @@
 
 - [x] 全量：`pnpm lint && pnpm tsc && (cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test)`。
 - [x] 用一份不含新字段的旧 `settings.json` 启动，确认直接进入 dock（AC8）。
-- [ ] `trellis-check`（进行中）；`.trellis/spec/backend/settings-window-platform.md` 补 layout 契约小节；`frontend/component-guidelines.md` 补卡片变体约定（如适用）。
-- [ ] 提交：`feat: add Paste-style bottom dock layout for clipboard window`。
+- [x] `trellis-check`；`.trellis/spec/backend/settings-window-platform.md` 补 layout 契约小节；`frontend/component-guidelines.md` 补卡片变体约定（如适用）。
+- [x] 提交：`feat: add Paste-style bottom dock layout for clipboard window`。
 
 ## 风险与回滚点
 
