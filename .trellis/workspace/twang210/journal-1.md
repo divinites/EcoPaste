@@ -38,3 +38,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 停靠面板修复：滚轮、粘贴权限、偏好窗口、Dock 图标
+
+**Date**: 2026-10-13
+**Task**: 停靠面板修复：滚轮、粘贴权限、偏好窗口、Dock 图标
+**Branch**: `feat/paste-dock-panel`
+
+### Summary
+
+修复用户反馈：Virtuoso 横向 scrollBy 需传 top；粘贴前检查辅助功能权限并弹系统授权 + 本地化 toast；macOS Dock reopen 改走顶层 show_window 以重建偏好窗口；停靠顶栏加齿轮按钮；普通窗口隐藏后按设置重新收回 Dock 图标。release 构建已替换本机并实机验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4b23fb5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
+- **Total Sessions**: 2
 - **Last Active**: 2026-10-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~40 | Active |
+| `journal-1.md` | ~73 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-10-13 | 停靠面板修复：滚轮、粘贴权限、偏好窗口、Dock 图标 | `4b23fb5` | `feat/paste-dock-panel` |
 | 1 | 2026-10-13 | Paste 风格底部停靠剪贴板面板 | `e87c1bc` | `feat/paste-dock-panel` |
 <!-- @@@/auto:session-history -->
 
