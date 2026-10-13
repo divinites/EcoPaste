@@ -4,7 +4,7 @@
   "branch": null,
   "children": [],
   "commit": null,
-  "completedAt": null,
+  "completedAt": "2026-10-13",
   "createdAt": "2026-10-13",
   "creator": "twang210",
   "description": "修复用户反馈：双击不粘贴（缺辅助功能权限且无提示）、滚轮不横向滚动、Dock 图标 reopen 打不开偏好窗口",
@@ -19,7 +19,7 @@
   "priority": "P0",
   "relatedFiles": [],
   "scope": null,
-  "status": "in_progress",
+  "status": "completed",
   "subtasks": [],
   "title": "停靠面板修复：双击粘贴权限、滚轮横向滚动、偏好窗口打开",
   "worktree_path": null
