@@ -78,6 +78,8 @@ export interface ClipboardItem {
   filesPreviewKind?: "imagePreview" | "list";
   /** Rust 按本地时区做三档格式化的 createdAt：HH:mm / MM-DD HH:mm / YYYY-MM-DD HH:mm。 */
   displayCreatedAt?: string;
+  /** text 条目的字符数（列表 SELECT 用 `length(content)` 计算）；非文本条目不存在。 */
+  charCount?: number;
 }
 
 export interface ClipboardApp {

@@ -15,8 +15,8 @@ use tauri::AppHandle;
 use crate::core::{AppError, Result};
 
 use super::model::{
-    Language, Settings, WINDOW_OPEN_GROUP_PREFIX, WINDOW_OPEN_SELECTION_ALL,
-    WINDOW_OPEN_SELECTION_PRESERVE,
+    Language, Settings, DOCK_HEIGHT_PERCENT_RANGE, WINDOW_OPEN_GROUP_PREFIX,
+    WINDOW_OPEN_SELECTION_ALL, WINDOW_OPEN_SELECTION_PRESERVE,
 };
 
 const FILENAME: &str = "settings.json";
@@ -184,6 +184,7 @@ fn write_atomic(path: &Path, settings: &Settings) -> Result<()> {
 /// 校验设置之间的跨字段约束，避免非法配置写入磁盘。
 fn validate_settings(settings: &Settings) -> Result<()> {
     validate_window_open_group(&settings.clipboard.window.select_group_on_open)?;
+    validate_dock_height_percent(settings.clipboard.window.dock_height_percent)?;
 
     let open_clipboard = normalize_shortcut_value(&settings.shortcuts.open_clipboard);
     let open_preference = normalize_shortcut_value(&settings.shortcuts.open_preference);
@@ -220,6 +221,19 @@ fn validate_window_open_group(value: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// 校验底部停靠面板高度百分比，避免把面板撑满整屏或缩到无法容纳卡片。
+fn validate_dock_height_percent(value: u8) -> Result<()> {
+    if DOCK_HEIGHT_PERCENT_RANGE.contains(&value) {
+        return Ok(());
+    }
+
+    Err(AppError::Other(anyhow::anyhow!(
+        "dock height percent must be between {} and {}",
+        DOCK_HEIGHT_PERCENT_RANGE.start(),
+        DOCK_HEIGHT_PERCENT_RANGE.end()
+    )))
 }
 
 /// 归一化快捷键字面量，供跨字段校验忽略大小写和多余空白。
@@ -297,6 +311,23 @@ mod tests {
     }
 
     #[test]
+    fn validate_settings_bounds_dock_height_percent() {
+        let mut settings = Settings::default();
+
+        settings.clipboard.window.dock_height_percent = 24;
+        assert!(validate_settings(&settings).is_err());
+
+        settings.clipboard.window.dock_height_percent = 25;
+        assert!(validate_settings(&settings).is_ok());
+
+        settings.clipboard.window.dock_height_percent = 60;
+        assert!(validate_settings(&settings).is_ok());
+
+        settings.clipboard.window.dock_height_percent = 61;
+        assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
     fn validate_settings_allows_empty_global_shortcuts() {
         let mut settings = Settings::default();
         settings.shortcuts.open_preference = String::new();
@@ -321,6 +352,11 @@ mod tests {
             crate::db::models::ClipboardItemSort::UpdatedAt
         );
         assert!(!parsed.clipboard.content.copy_then_hide_window);
+        assert_eq!(
+            parsed.clipboard.window.layout,
+            crate::settings::ClipboardWindowLayout::Dock
+        );
+        assert_eq!(parsed.clipboard.window.dock_height_percent, 40);
         assert!(
             parsed
                 .clipboard

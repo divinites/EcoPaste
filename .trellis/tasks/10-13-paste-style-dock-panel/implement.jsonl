@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/settings-window-platform.md", "reason": "新增 layout / dockHeightPercent 设置项与窗口几何、预览定位改动必须遵守的设置模型、窗口生命周期与平台约定"}
+{"file": ".trellis/spec/backend/commands-and-events.md", "reason": "列表 payload 新增 charCount 与设置更新事件走既有 command / emit 契约"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "DockHeader、Group tab 变体、ClipboardCard dock 变体的组件形态、样式 token 与 i18n 约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "layout 从 settingsState 镜像读取，不得新建前端副本；clipboardViewState 字段约束"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "抽取 useClipboardHeaderActions 与事件订阅、useMount / useUnmount 约定"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "设置字段与 payload 字段跨 Rust / TS / schema / locale 多处镜像，按此清单逐一同步"}

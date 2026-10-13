@@ -9,6 +9,8 @@ use crate::db::models::ClipboardItemSort;
 pub const WINDOW_OPEN_SELECTION_PRESERVE: &str = "preserve";
 pub const WINDOW_OPEN_SELECTION_ALL: &str = "all";
 pub const WINDOW_OPEN_GROUP_PREFIX: &str = "group:";
+/// 底部停靠面板高度占工作区高度的百分比范围（含端点）。
+pub const DOCK_HEIGHT_PERCENT_RANGE: std::ops::RangeInclusive<u8> = 25..=60;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
@@ -561,6 +563,11 @@ impl Default for Search {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Window {
+    /// 剪贴板窗口布局：`Dock` 为屏幕底部整宽横排卡片，`Vertical` 为传统竖向小窗。
+    pub layout: ClipboardWindowLayout,
+    /// `Dock` 布局下面板高度占工作区高度的百分比，范围见 [`DOCK_HEIGHT_PERCENT_RANGE`]。
+    pub dock_height_percent: u8,
+    /// 仅 `Vertical` 布局生效；`Dock` 布局固定贴底，忽略此项。
     pub position: WindowPosition,
     /// 打开剪贴板窗口时把历史列表回到顶部。
     pub scroll_to_top_on_open: bool,
@@ -579,6 +586,8 @@ pub struct Window {
 impl Default for Window {
     fn default() -> Self {
         Self {
+            layout: ClipboardWindowLayout::Dock,
+            dock_height_percent: 40,
             position: WindowPosition::FollowCursor,
             scroll_to_top_on_open: true,
             select_range_on_open: WindowOpenRangeSelection::Preserve,
@@ -608,6 +617,14 @@ pub enum WindowOpenCategorySelection {
     Text,
     Image,
     Files,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ClipboardWindowLayout {
+    Vertical,
+    #[default]
+    Dock,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]

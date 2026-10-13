@@ -15,10 +15,13 @@ pub use state::WindowStateStore;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    Window,
+};
 
 use crate::core::Result;
-use crate::settings::{SettingsStore, WindowPosition};
+use crate::settings::{ClipboardWindowLayout, SettingsStore, WindowPosition};
 
 pub const CLIPBOARD_WINDOW_LABEL: &str = "clipboard";
 pub const PREFERENCE_WINDOW_LABEL: &str = "preference";
@@ -203,8 +206,16 @@ pub fn position_window(app_handle: &AppHandle, label: &str, pos: WindowPosition)
     position::position_window(&window, pos)
 }
 
-/// 剪贴板窗口显示前按设置应用窗口定位策略。
-/// 始终先调用 `restore_window_state` 恢复尺寸与合法位置（含越界 fallback）；
+/// 竖向布局的最小尺寸，与 `tauri.conf.json` 的 `minWidth` / `minHeight` 一致；
+/// 停靠布局运行时解除该限制，否则 `set_size` 会被钳到 600 高。
+const VERTICAL_MIN_SIZE: LogicalSize<f64> = LogicalSize {
+    width: 360.0,
+    height: 600.0,
+};
+
+/// 剪贴板窗口显示前按设置应用布局与定位策略。
+/// `Dock` 布局：解除最小尺寸后贴底整宽，忽略 `position` 与存档几何。
+/// `Vertical` 布局：始终先 `restore_window_state` 恢复尺寸与合法位置（含越界 fallback），
 /// 非 Remember 策略再由 `position_window` 覆盖位置。
 /// 平台 `show_window` 需要在主线程闭包里调用，避免 set_position 与 show 异步交错产生闪烁。
 fn apply_clipboard_window_layout(app_handle: &AppHandle) -> Result<()> {
@@ -212,16 +223,43 @@ fn apply_clipboard_window_layout(app_handle: &AppHandle) -> Result<()> {
         return Ok(());
     };
     let snap = store.snapshot();
-    let position = snap.clipboard.window.position;
+    let window_settings = &snap.clipboard.window;
+    let window = get_window(app_handle, CLIPBOARD_WINDOW_LABEL)?;
 
-    let _ = state::restore_window_state(app_handle, CLIPBOARD_WINDOW_LABEL)?;
+    if window_settings.layout == ClipboardWindowLayout::Dock {
+        window
+            .set_min_size::<LogicalSize<f64>>(None)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        return position::apply_dock(&window, window_settings.dock_height_percent);
+    }
 
-    if matches!(position, WindowPosition::Remember) {
+    window
+        .set_min_size(Some(VERTICAL_MIN_SIZE))
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    let restored = state::restore_window_state(app_handle, CLIPBOARD_WINDOW_LABEL)?;
+
+    // 从 Dock 切回且从未存档过竖向几何时，窗口仍是整宽尺寸，需回到配置默认值。
+    if !restored {
+        window
+            .set_size(VERTICAL_MIN_SIZE)
+            .map_err(|e| anyhow::anyhow!(e))?;
+    }
+
+    if matches!(window_settings.position, WindowPosition::Remember) {
         return Ok(());
     }
 
-    let window = get_window(app_handle, CLIPBOARD_WINDOW_LABEL)?;
-    position::position_window(&window, position)
+    position::position_window(&window, window_settings.position)
+}
+
+/// 停靠布局下剪贴板窗口的整宽几何不写入存档，避免污染竖向布局的记忆尺寸。
+/// 作为 `state::save_window_state` 的统一守卫，覆盖 hide / 关闭 / 空闲销毁 / 退出四条落盘路径。
+pub(super) fn is_clipboard_window_docked(app_handle: &AppHandle) -> bool {
+    app_handle
+        .try_state::<SettingsStore>()
+        .map(|store| store.snapshot().clipboard.window.layout == ClipboardWindowLayout::Dock)
+        .unwrap_or(false)
 }
 
 /// 保存当前所有窗口的几何信息。供应用退出（`RunEvent::ExitRequested`）时调用，

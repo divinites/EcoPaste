@@ -112,6 +112,11 @@ pub struct ClipboardItem {
     #[sqlx(skip)]
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub display_created_at: String,
+    /// Text 类条目的字符数，由列表 SELECT 在清空 `content` 的同时用 `length(content)` 算出，
+    /// 供停靠卡片底部元信息展示；非文本条目与单条 `SELECT_ITEM` 路径为 `None`。
+    #[sqlx(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub char_count: Option<i64>,
 }
 
 /// 右键菜单可执行的动作种类。

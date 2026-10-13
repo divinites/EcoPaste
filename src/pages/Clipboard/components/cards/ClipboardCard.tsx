@@ -10,13 +10,22 @@ import type { ItemAction } from "@/types/settings";
 import { cn } from "@/utils/cn";
 import { isMac } from "@/utils/is";
 import ClipboardQuickActions from "./ClipboardQuickActions";
+import { formatCardMeta } from "./cardMeta";
+import { resolveCardBandClass } from "./cardTheme";
 import FilesCard from "./FilesCard";
 import ImageCard from "./ImageCard";
 import NoteContentSwitcher from "./NoteContentSwitcher";
 import TextCard from "./TextCard";
 
+export type ClipboardCardVariant = "compact" | "dock";
+
 interface ClipboardCardProps {
   item: ClipboardItem;
+  /**
+   * `compact` 为竖向列表的紧凑卡片；`dock` 为底部停靠面板的正方形大卡片，
+   * 带类型着色标题带与底部元信息。
+   */
+  variant?: ClipboardCardVariant;
   isSelected?: boolean;
   /**
    * 快捷键提示字符（"1"–"9" / "0"），存在时在 app 图标上叠加 KeyHint；
@@ -58,6 +67,7 @@ interface ClipboardCardProps {
 const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   const {
     item,
+    variant = "compact",
     isSelected,
     hintKey,
     onQuickPaste,
@@ -79,23 +89,34 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   const { kind, sourceAppId, subKind, sourceAppIconPath, sourceAppName } = item;
   const { t } = useTranslation("clipboard");
   const [hovered, setHovered] = useState(false);
+  const isDock = variant === "dock";
   const typeKey = subKind ?? kind;
   const typeLabel = t(`types.${typeKey}`);
-  const body = renderBody(item, isLinkActive, onOpenLink);
+  const body = renderBody(item, isDock, isLinkActive, onOpenLink);
   const showSensitiveIndicator = item.isSensitive && item.kind === "text";
   const showStatusIndicators = item.isPinned || showSensitiveIndicator;
   const sourceAppIcon = sourceAppId ? (
     <AssetImage
       alt={sourceAppName}
-      className="size-4"
+      className={cn({ "size-4": !isDock, "size-5": isDock })}
       src={sourceAppIconPath}
     />
   ) : (
     <img
       alt="EcoPaste"
-      className="pointer-events-none size-4"
+      className={cn("pointer-events-none", {
+        "size-4": !isDock,
+        "size-5": isDock,
+      })}
       src={isMac ? "/logo-mac.png" : "/logo.png"}
     />
+  );
+  const hintedSourceAppIcon = hintKey ? (
+    <KeyHint hintKey={hintKey} onKeyPress={onQuickPaste}>
+      {sourceAppIcon}
+    </KeyHint>
+  ) : (
+    sourceAppIcon
   );
 
   const handleDragStart = async (event: DragEvent) => {
@@ -132,9 +153,94 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     onPointerLeave?.();
   };
 
+  const content = item.note ? (
+    <NoteContentSwitcher
+      note={item.note}
+      showOriginal={showOriginalOnHover && hovered}
+    >
+      {body}
+    </NoteContentSwitcher>
+  ) : (
+    body
+  );
+
+  const rootProps = {
+    "aria-selected": isSelected,
+    draggable: true,
+    onAuxClick,
+    onContextMenu: handleContextMenu,
+    onDoubleClick,
+    onDragStart: handleDragStart,
+    onMouseDown,
+    onPointerEnter: handlePointerEnter,
+    onPointerLeave: handlePointerLeave,
+    onPointerMove,
+    ref: rootRef,
+    role: "option",
+    tabIndex: -1,
+  } as const;
+
+  if (isDock) {
+    const bandClass = resolveCardBandClass(item);
+    const meta = formatCardMeta(item, t);
+
+    return (
+      <div
+        {...rootProps}
+        className={cn(
+          "relative flex size-full flex-col overflow-hidden rounded-4 bg-ant-container shadow-md ring-1 ring-ant-border-secondary transition-shadow duration-150 ease-out motion-reduce:transition-none",
+          {
+            "shadow-lg ring-2 ring-ant-primary": isSelected,
+          },
+        )}
+      >
+        <div
+          className={cn(
+            "flex h-13 shrink-0 items-center justify-between gap-2 px-3 text-ant-light-solid",
+            bandClass,
+          )}
+        >
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate font-medium text-sm">{typeLabel}</span>
+            <span className="truncate text-xs opacity-85">
+              {item.displayCreatedAt ?? item.createdAt}
+            </span>
+          </div>
+
+          <div className="shrink-0 rounded-2 bg-ant-container p-1">
+            {hintedSourceAppIcon}
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden p-3 text-sm leading-6">
+          {content}
+        </div>
+
+        <div className="flex h-8 shrink-0 items-center gap-2 px-3 text-ant-tertiary text-xs">
+          <div className="flex w-10 shrink-0 items-center gap-1">
+            {showStatusIndicators
+              ? renderStatusIcons(item.isPinned, showSensitiveIndicator)
+              : null}
+          </div>
+
+          <span className="min-w-0 flex-1 truncate text-center">{meta}</span>
+
+          <ClipboardQuickActions
+            item={item}
+            labels={quickActionLabels}
+            onQuickAction={onQuickAction}
+            placeholder={null}
+            quickActions={quickActions}
+            visible={hovered}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      aria-selected={isSelected}
+      {...rootProps}
       className={cn(
         "relative flex flex-col gap-1 overflow-hidden rounded-2 border border-ant-border-secondary p-2 transition-colors duration-150 ease-out motion-reduce:transition-none",
         {
@@ -142,28 +248,10 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
           "border-ant-primary bg-ant-container": item.isPinned && !isSelected,
         },
       )}
-      draggable
-      onAuxClick={onAuxClick}
-      onContextMenu={handleContextMenu}
-      onDoubleClick={onDoubleClick}
-      onDragStart={handleDragStart}
-      onMouseDown={onMouseDown}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
-      onPointerMove={onPointerMove}
-      ref={rootRef}
-      role="option"
-      tabIndex={-1}
     >
       <div className="flex items-center justify-between text-ant-secondary text-xs">
         <div className="flex min-w-0 items-center gap-1 overflow-hidden">
-          {hintKey ? (
-            <KeyHint hintKey={hintKey} onKeyPress={onQuickPaste}>
-              {sourceAppIcon}
-            </KeyHint>
-          ) : (
-            sourceAppIcon
-          )}
+          {hintedSourceAppIcon}
 
           <span className="truncate">{typeLabel}</span>
         </div>
@@ -177,16 +265,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
         />
       </div>
 
-      {item.note ? (
-        <NoteContentSwitcher
-          note={item.note}
-          showOriginal={showOriginalOnHover && hovered}
-        >
-          {body}
-        </NoteContentSwitcher>
-      ) : (
-        body
-      )}
+      {content}
       {showStatusIndicators
         ? renderStatusIndicators(item.isPinned, showSensitiveIndicator)
         : null}
@@ -195,32 +274,53 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
 };
 
 /**
- * 渲染卡片右下角的状态水印；仅表达状态，不参与交互。
+ * 渲染紧凑卡片右下角的状态水印；仅表达状态，不参与交互。
  */
 function renderStatusIndicators(isPinned: boolean, isSensitive: boolean) {
   return (
     <div className="pointer-events-none absolute right-2 bottom-2 flex items-end gap-1 text-ant-quaternary">
+      {renderStatusIcons(isPinned, isSensitive, "size-5")}
+    </div>
+  );
+}
+
+/**
+ * 置顶 / 敏感状态图标；停靠卡片放在底栏左侧，紧凑卡片放在右下角水印。
+ */
+function renderStatusIcons(
+  isPinned: boolean,
+  isSensitive: boolean,
+  sizeClass = "size-4",
+) {
+  return (
+    <>
       {isPinned ? (
-        <i aria-hidden="true" className="i-ph:push-pin-bold size-5" />
+        <i aria-hidden="true" className={cn("i-ph:push-pin-bold", sizeClass)} />
       ) : null}
       {isSensitive ? (
-        <i aria-hidden="true" className="i-lucide:key-round size-5" />
+        <i aria-hidden="true" className={cn("i-lucide:key-round", sizeClass)} />
       ) : null}
-    </div>
+    </>
   );
 }
 
 const renderBody = (
   item: ClipboardItem,
+  fill: boolean,
   isLinkActive?: boolean,
   onOpenLink?: () => void,
 ) => {
-  if (item.kind === "image") return <ImageCard {...item} />;
+  if (item.kind === "image") return <ImageCard {...item} fill={fill} />;
 
-  if (item.kind === "files") return <FilesCard {...item} />;
+  if (item.kind === "files") return <FilesCard {...item} fill={fill} />;
 
   return (
-    <TextCard {...item} isLinkActive={isLinkActive} onOpenLink={onOpenLink} />
+    <TextCard
+      {...item}
+      fill={fill}
+      isLinkActive={isLinkActive}
+      onOpenLink={onOpenLink}
+    />
   );
 };
 

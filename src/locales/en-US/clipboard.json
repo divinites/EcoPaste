@@ -59,6 +59,11 @@
     "searchPlaceholder": "Search clipboard...",
     "unpin": "Unpin"
   },
+  "meta": {
+    "characters": "{{count}} characters",
+    "dimensions": "{{width}} × {{height}}",
+    "files": "{{count}} files"
+  },
   "note": {
     "placeholder": "Add a note for this item...",
     "title": "Edit note"
@@ -87,7 +92,8 @@
     "deleteSelected": "Delete selected item",
     "favoriteSelected": "Favorite / unfavorite",
     "focusSearch": "Focus search",
-    "navigate": "Navigate up/down",
+    "navigate": "Navigate",
+    "navigateHorizontal": "Navigate left / right",
     "noteSelected": "Add / edit note",
     "openPreference": "Open Preferences Window",
     "openSelected": "Open link / email / file location",

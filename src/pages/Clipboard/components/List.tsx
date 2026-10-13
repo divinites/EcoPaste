@@ -1,12 +1,14 @@
-import { useMount } from "ahooks";
+import { useMount, useUnmount } from "ahooks";
 import { Empty, Spin } from "antd";
 import type { TFunction } from "i18next";
 import type {
+  CSSProperties,
   FC,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
 } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type TopItemListProps,
@@ -65,6 +67,19 @@ import NoteModal from "./NoteModal";
 /** 前 10 项的快捷键：index 0-8 对应 1-9，index 9 对应 0 */
 const KEY_HINTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
+export type ListOrientation = "vertical" | "horizontal";
+
+/** 横向列表条目上下留白（px，各 8），卡片边长 = 列表高度 - 该值。 */
+const HORIZONTAL_ITEM_PADDING_Y = 16;
+
+interface ListProps {
+  /**
+   * `vertical`：竖向窗口的单列紧凑卡片，上下键导航；
+   * `horizontal`：停靠面板的单行正方形大卡片，左右键导航，滚轮转为横向滚动。
+   */
+  orientation?: ListOrientation;
+}
+
 interface ClipboardUpdatedPayload {
   cleanup?: number;
   deduplicated?: boolean;
@@ -81,15 +96,19 @@ interface ClipboardMenuActionPayload {
 
 /**
  * 剪贴板历史列表：虚拟滚动 + 分类型卡片 + 可视范围分页加载，
- * 跟随关键词（Header 已防抖）检索。
+ * 跟随关键词（Header 已防抖）检索；按 `orientation` 在竖向单列与横向单行间切换。
  */
-const List: FC = () => {
+const List: FC<ListProps> = (props) => {
+  const { orientation = "vertical" } = props;
+  const isHorizontal = orientation === "horizontal";
   const { t } = useTranslation("clipboard");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [isModifierPressed, setIsModifierPressed] = useState(false);
   const [customGroups, setCustomGroups] = useState<ClipboardGroupRecord[]>([]);
   const [noteTarget, setNoteTarget] = useState<ClipboardItem | null>(null);
+  const [cardSize, setCardSize] = useState(0);
+  const cardSizeObserverRef = useRef<ResizeObserver | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isAtTopRef = useRef(true);
   const itemElementMapRef = useRef(new Map<string, HTMLDivElement>());
@@ -139,7 +158,8 @@ const List: FC = () => {
     kind: category ?? void 0,
     sort,
   });
-  const topItemCount = countLeadingPinnedItems(getItem);
+  // 横向模式下 Virtuoso 的 sticky top items 会固定在最左侧遮住滚动内容，置顶条目仅保留排序与标识。
+  const topItemCount = isHorizontal ? 0 : countLeadingPinnedItems(getItem);
   const {
     closeHoverPreviewForScroll,
     closePreview,
@@ -701,11 +721,13 @@ const List: FC = () => {
       return;
     }
 
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    const direction = getNavigationDirection(event.key, isHorizontal);
+
+    if (direction === 0) return;
 
     event.preventDefault();
 
-    const next = getNextKeyboardTarget(event);
+    const next = getNextKeyboardTarget(direction);
 
     if (!next) return;
 
@@ -739,6 +761,52 @@ const List: FC = () => {
 
     closeHoverPreviewForScroll();
     loadRange(startIndex, endIndex);
+  };
+
+  /**
+   * 横向列表按容器高度算出正方形卡片边长。Virtuoso 的条目外层是 inline-block，
+   * 百分比高度配合 aspect-ratio 在收缩适配时会解析成零宽，必须给出像素定值。
+   * 列表根节点在首屏加载完成后才挂载，因此用 callback ref 在节点出现时才开始观测。
+   */
+  const handleListRootRef = useCallback(
+    (root: HTMLDivElement | null) => {
+      cardSizeObserverRef.current?.disconnect();
+      cardSizeObserverRef.current = null;
+
+      if (!root || !isHorizontal) return;
+
+      const updateCardSize = () => {
+        const next = Math.max(
+          0,
+          Math.floor(root.clientHeight - HORIZONTAL_ITEM_PADDING_Y),
+        );
+
+        setCardSize((current) => {
+          return current === next ? current : next;
+        });
+      };
+
+      const observer = new ResizeObserver(updateCardSize);
+      observer.observe(root);
+      cardSizeObserverRef.current = observer;
+      updateCardSize();
+    },
+    [isHorizontal],
+  );
+
+  useUnmount(() => {
+    cardSizeObserverRef.current?.disconnect();
+  });
+
+  /**
+   * 横向列表把普通鼠标滚轮的纵向滚动量转为横向滚动；触控板的横向手势已带 deltaX，原样交给浏览器。
+   * React 的 wheel 监听是 passive 的，这里不调用 preventDefault；横向滚动容器本身没有纵向可滚区域。
+   */
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!isHorizontal) return;
+    if (event.deltaX !== 0 || event.deltaY === 0) return;
+
+    virtuosoRef.current?.scrollBy({ left: event.deltaY });
   };
 
   const handleAtTopStateChange = (atTop: boolean) => {
@@ -801,8 +869,10 @@ const List: FC = () => {
 
   return (
     <div
-      className="relative flex-1 overflow-hidden"
+      className="relative min-h-0 flex-1 overflow-hidden"
       onPointerLeave={handlePreviewAreaPointerLeave}
+      onWheel={handleWheel}
+      ref={handleListRootRef}
       role="listbox"
     >
       <VirtuosoScroller>{renderVirtuoso}</VirtuosoScroller>
@@ -823,6 +893,7 @@ const List: FC = () => {
         atTopStateChange={handleAtTopStateChange}
         components={{ TopItemList }}
         computeItemKey={computeItemKey}
+        horizontalDirection={isHorizontal}
         itemContent={renderItemContent}
         rangeChanged={handleRangeChanged}
         ref={virtuosoRef}
@@ -1007,7 +1078,10 @@ const List: FC = () => {
     );
 
     return (
-      <div className={cn("px-3", { "pt-3": index !== 0 })}>
+      <div
+        className={itemWrapperClass(isHorizontal, index, total)}
+        style={itemWrapperStyle(isHorizontal, cardSize)}
+      >
         <ClipboardCard
           availableActions={availableActions}
           hintKey={hintKey}
@@ -1031,12 +1105,31 @@ const List: FC = () => {
           quickActions={visibleQuickActions}
           rootRef={registerItemElement(item.id)}
           showOriginalOnHover={showOriginalPreview}
+          variant={isHorizontal ? "dock" : "compact"}
         />
       </div>
     );
   }
 
   function renderPlaceholderItem(index: number) {
+    if (isHorizontal) {
+      return (
+        <div
+          aria-hidden="true"
+          className={itemWrapperClass(isHorizontal, index, total)}
+          style={itemWrapperStyle(isHorizontal, cardSize)}
+        >
+          <div className="size-full overflow-hidden rounded-4 bg-ant-fill-quaternary ring-1 ring-ant-border-secondary">
+            <div className="h-13 bg-ant-fill-secondary" />
+            <div className="flex flex-col gap-2 p-3">
+              <span className="h-3 w-9/12 rounded-1 bg-ant-fill-secondary" />
+              <span className="h-3 w-6/12 rounded-1 bg-ant-fill-secondary" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div aria-hidden="true" className={cn("px-3", { "pt-3": index !== 0 })}>
         <div className="min-h-24 rounded-2 border border-ant-border-secondary bg-ant-fill-quaternary p-2">
@@ -1054,15 +1147,15 @@ const List: FC = () => {
   }
 
   /**
-   * 根据方向键计算下一项。
+   * 根据导航方向计算下一项。
    */
-  function getNextKeyboardTarget(event: KeyboardEvent) {
+  function getNextKeyboardTarget(direction: -1 | 1) {
     const nextIndex = getNextKeyboardIndex(
       getItemIndexById,
       firstVisibleIndex,
       selectedId,
       total,
-      event.key,
+      direction,
     );
     const item = getItem(nextIndex);
     if (!item) {
@@ -1247,24 +1340,68 @@ function getCurrentGroupName(
 }
 
 /**
- * 根据方向键和当前选中 id 计算下一项索引。
+ * 把方向键映射为条目导航方向：竖向列表响应上下键，横向列表响应左右键；其余键返回 0。
+ */
+function getNavigationDirection(
+  key: string,
+  isHorizontal: boolean,
+): -1 | 0 | 1 {
+  if (isHorizontal) {
+    if (key === "ArrowLeft") return -1;
+    if (key === "ArrowRight") return 1;
+
+    return 0;
+  }
+
+  if (key === "ArrowUp") return -1;
+  if (key === "ArrowDown") return 1;
+
+  return 0;
+}
+
+/**
+ * 根据导航方向和当前选中 id 计算下一项索引。
  */
 function getNextKeyboardIndex(
   getItemIndexById: (id: string) => number | null,
   firstVisibleIndex: number,
   selectedId: string | null,
   total: number,
-  key: string,
+  direction: -1 | 1,
 ) {
   const selectedIndex =
     selectedId === null ? null : getItemIndexById(selectedId);
   const currentIndex = selectedIndex ?? firstVisibleIndex;
 
-  if (key === "ArrowUp") {
+  if (direction === -1) {
     return Math.max(0, currentIndex - 1);
   }
 
   return Math.min(total - 1, currentIndex + 1);
+}
+
+/**
+ * 条目外层容器类：竖向模式只有左右内边距与行间距；
+ * 横向模式撑满高度，首尾条目补齐面板两侧留白。
+ */
+function itemWrapperClass(isHorizontal: boolean, index: number, total: number) {
+  if (!isHorizontal) {
+    return cn("px-3", { "pt-3": index !== 0 });
+  }
+
+  return cn("box-content py-2 pl-4", { "pr-4": index === total - 1 });
+}
+
+/**
+ * 横向条目的像素尺寸：卡片为正方形，宽高与测得的边长一致；尺寸未测出前不渲染条目尺寸。
+ */
+function itemWrapperStyle(
+  isHorizontal: boolean,
+  cardSize: number,
+): CSSProperties | undefined {
+  if (!isHorizontal || cardSize <= 0) return void 0;
+
+  return { height: cardSize, width: cardSize };
 }
 
 /**

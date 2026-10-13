@@ -99,14 +99,31 @@ const CUSTOM_GROUPS_SETTING_ID = "organizing.customGroups";
 const GROUP_BUTTON_BASE_CLASS =
   "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-1.5 border-0 bg-transparent p-0 transition-colors";
 const GROUP_ICON_BUTTON_CLASS = GROUP_BUTTON_BASE_CLASS;
+const GROUP_TAB_BUTTON_CLASS =
+  "flex h-7 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border-0 bg-transparent px-3 text-sm transition-colors";
+
+export type GroupVariant = "icon" | "tab";
+
+interface GroupProps {
+  /**
+   * `icon`：竖向窗口下的纯图标栏，宽度不足时把自定义分组收进「更多」菜单；
+   * `tab`：停靠面板顶栏的带名称胶囊标签，溢出时横向滚动。
+   */
+  variant?: GroupVariant;
+}
 const GROUP_BUTTON_WIDTH = 24;
 const GROUP_BUTTON_GAP = 4;
 const GROUP_SEPARATOR_MARGIN = 4;
 
 /**
- * Header 下方的分组筛选栏：内置类型分组 + 自定义分组入口。
+ * 分组筛选栏：内置类型分组 + 自定义分组入口；按 `variant` 渲染为图标栏或名称标签栏。
  */
-const Group: FC = () => {
+const Group: FC<GroupProps> = (props) => {
+  const { variant = "icon" } = props;
+  const isTab = variant === "tab";
+  const customGroupButtonClass = isTab
+    ? GROUP_TAB_BUTTON_CLASS
+    : GROUP_ICON_BUTTON_CLASS;
   const { t } = useTranslation(["clipboard", "common"]);
   const { category, groupId, range } = useSnapshot(clipboardViewState);
 
@@ -127,13 +144,12 @@ const Group: FC = () => {
   const visibleCustomGroups = customGroups.filter((record) => {
     return !record.isHidden;
   });
-  const inlineCustomGroups = visibleCustomGroups.slice(
-    0,
-    visibleCustomGroupCount,
-  );
-  const overflowCustomGroups = visibleCustomGroups.slice(
-    visibleCustomGroupCount,
-  );
+  const inlineCustomGroups = isTab
+    ? visibleCustomGroups
+    : visibleCustomGroups.slice(0, visibleCustomGroupCount);
+  const overflowCustomGroups = isTab
+    ? []
+    : visibleCustomGroups.slice(visibleCustomGroupCount);
 
   /**
    * 从 Rust 拉取自定义分组。
@@ -142,14 +158,16 @@ const Group: FC = () => {
     const groups = await listClipboardGroups();
 
     setCustomGroups(groups);
-    scheduleVisibleCustomGroupCountUpdate(
-      toolbarRef,
-      customGroupAnchorRef,
-      setVisibleCustomGroupCount,
-      groups.filter((record) => {
-        return !record.isHidden;
-      }).length,
-    );
+    if (!isTab) {
+      scheduleVisibleCustomGroupCountUpdate(
+        toolbarRef,
+        customGroupAnchorRef,
+        setVisibleCustomGroupCount,
+        groups.filter((record) => {
+          return !record.isHidden;
+        }).length,
+      );
+    }
     ensureSelectedGroupStillExists(groups);
   };
 
@@ -170,9 +188,11 @@ const Group: FC = () => {
   useTauriListen(TAURI_EVENT.CLIPBOARD_GROUPS_UPDATED, handleGroupsUpdated);
 
   /**
-   * 容器尺寸变化时重新测量溢出状态。
+   * 容器尺寸变化时重新测量溢出状态；标签变体横向滚动，不做溢出折叠。
    */
   useEffect(() => {
+    if (isTab) return;
+
     const toolbar = toolbarRef.current;
     const customAnchor = customGroupAnchorRef.current;
     if (!toolbar || !customAnchor) return;
@@ -193,7 +213,7 @@ const Group: FC = () => {
     return () => {
       observer.disconnect();
     };
-  }, [visibleCustomGroups.length]);
+  }, [isTab, visibleCustomGroups.length]);
 
   /**
    * 切换范围；范围必须始终保留一个选中项。
@@ -256,7 +276,8 @@ const Group: FC = () => {
   };
 
   /**
-   * 处理分组栏快捷键：Cmd/Ctrl+Q 切换范围，左右键切分类，Tab / Shift+Tab 仅在可见自定义分组间循环。
+   * 处理分组栏快捷键：Cmd/Ctrl+Q 切换范围，Tab / Shift+Tab 仅在可见自定义分组间循环。
+   * 切分类的方向键与列表导航键互补：图标栏（竖向列表）用左右键，标签栏（横向列表）用上下键。
    */
   const handleKeyDown = (event: KeyboardEvent) => {
     const eventModifierPressed = event.metaKey || event.ctrlKey;
@@ -268,12 +289,11 @@ const Group: FC = () => {
       return;
     }
 
-    if (
-      (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
-      !shouldUseNativeHorizontalNavigation(event)
-    ) {
+    const categoryStep = getCategoryStep(event.key, isTab);
+
+    if (categoryStep !== 0 && !shouldUseNativeHorizontalNavigation(event)) {
       event.preventDefault();
-      selectAdjacentCategory(event.key === "ArrowLeft" ? -1 : 1);
+      selectAdjacentCategory(categoryStep);
 
       return;
     }
@@ -600,6 +620,32 @@ const Group: FC = () => {
     value: ClipboardCategory | ClipboardRange;
   }) => {
     const { icon, label, selected, showShortcutHint, type, value } = options;
+    const iconNode = showShortcutHint ? (
+      <KeyHint hintKey="Q">
+        <ClipboardGroupIcon icon={icon} selected={selected} />
+      </KeyHint>
+    ) : (
+      <ClipboardGroupIcon icon={icon} selected={selected} />
+    );
+
+    if (isTab) {
+      return (
+        <button
+          className={cn(GROUP_TAB_BUTTON_CLASS, {
+            "bg-ant-primary text-ant-light-solid": selected,
+            "text-ant-secondary hover:bg-ant-fill-tertiary": !selected,
+          })}
+          data-type={type}
+          data-value={value}
+          key={`${type}:${value}`}
+          onClick={handleGroupClick}
+          type="button"
+        >
+          {iconNode}
+          <span>{label}</span>
+        </button>
+      );
+    }
 
     return (
       <Tooltip key={`${type}:${value}`} title={label}>
@@ -613,13 +659,7 @@ const Group: FC = () => {
           onClick={handleGroupClick}
           type="button"
         >
-          {showShortcutHint ? (
-            <KeyHint hintKey="Q">
-              <ClipboardGroupIcon icon={icon} selected={selected} />
-            </KeyHint>
-          ) : (
-            <ClipboardGroupIcon icon={icon} selected={selected} />
-          )}
+          {iconNode}
         </button>
       </Tooltip>
     );
@@ -628,7 +668,10 @@ const Group: FC = () => {
   return (
     <>
       <div
-        className="flex items-center gap-1 overflow-hidden px-3 pb-2"
+        className={cn("flex items-center gap-1", {
+          "min-w-0 flex-1 overflow-x-auto [&::-webkit-scrollbar]:hidden": isTab,
+          "overflow-hidden px-3 pb-2": !isTab,
+        })}
         data-tauri-drag-region
         ref={toolbarRef}
       >
@@ -653,7 +696,7 @@ const Group: FC = () => {
                   trigger={["contextMenu"]}
                 >
                   <button
-                    className={cn(GROUP_ICON_BUTTON_CLASS, {
+                    className={cn(customGroupButtonClass, {
                       "bg-ant-primary text-ant-light-solid": selected,
                       "text-ant-secondary hover:bg-ant-fill-tertiary":
                         !selected,
@@ -667,6 +710,7 @@ const Group: FC = () => {
                       icon={record.icon}
                       selected={selected}
                     />
+                    {isTab ? <span>{record.name}</span> : null}
                   </button>
                 </Dropdown>
               );
@@ -986,7 +1030,24 @@ function selectAdjacentCustomGroup(
 }
 
 /**
- * 判断左右键是否应交给输入控件原生光标导航。
+ * 把方向键映射为分类切换步进：图标栏响应左右键，标签栏响应上下键；其余键返回 0。
+ */
+function getCategoryStep(key: string, isTab: boolean): -1 | 0 | 1 {
+  if (isTab) {
+    if (key === "ArrowUp") return -1;
+    if (key === "ArrowDown") return 1;
+
+    return 0;
+  }
+
+  if (key === "ArrowLeft") return -1;
+  if (key === "ArrowRight") return 1;
+
+  return 0;
+}
+
+/**
+ * 判断方向键是否应交给输入控件原生光标导航。
  */
 function shouldUseNativeHorizontalNavigation(event: KeyboardEvent) {
   const target = event.target;

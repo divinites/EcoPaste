@@ -64,6 +64,7 @@
       "items": "items",
       "lines": "lines",
       "mb": "MB",
+      "percent": "%",
       "px": "px",
       "seconds": "seconds"
     },
@@ -582,9 +583,21 @@
         }
       },
       "window": {
+        "dockHeightPercent": {
+          "description": "Percentage of the available screen height used by the bottom dock panel. Cards scale with the panel height.",
+          "title": "Dock Panel Height"
+        },
         "idleDestroySeconds": {
           "description": "Release secondary WebViews such as preferences, preview, and context menus after they have been hidden for this long; they rebuild automatically next time.",
           "title": "Secondary Window Idle Release"
+        },
+        "layout": {
+          "description": "Bottom Dock slides a full-width panel up from the bottom of the screen with cards in a row. Vertical Window keeps the compact vertical list.",
+          "options": {
+            "dock": "Bottom Dock",
+            "vertical": "Vertical Window"
+          },
+          "title": "Panel Layout"
         },
         "lightweightMode": {
           "description": "Pause unnecessary refresh work after the clipboard window hides, and release secondary rendering resources after they become idle.",

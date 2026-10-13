@@ -74,6 +74,34 @@ longer gives the icon slot an inline-flex centering box. The wrapper restores
 the slot styling through `Button`'s `classNames.icon` semantic slot without
 adding extra DOM wrappers or global `.ant-*` overrides.
 
+### UnoCSS Only Scans Template Files
+
+> **Warning**: UnoCSS's default pipeline include is
+> `(vue|svelte|[jt]sx|vine.ts|mdx?|astro|elm|php|phtml|marko|html)`. A utility
+> class that appears only in a plain `.ts` module (for example a
+> `Record<string, string>` of `bg-ant-gold-6` band colors) generates no CSS and
+> silently renders unstyled.
+>
+> Keep class-name maps in a `.tsx` file (see
+> `src/pages/Clipboard/components/cards/cardTheme.tsx`) or reference every class
+> from a `.tsx` consumer. Verify with `curl localhost:1420/__uno.css | grep <class>`
+> during `pnpm tauri dev`.
+
+### Clipboard Card Variants
+
+`ClipboardCard` takes `variant: "compact" | "dock"`; `List` takes
+`orientation: "vertical" | "horizontal"`; `Group` takes `variant: "icon" | "tab"`;
+`Header` takes `variant: "compact" | "dock"`. The page entry picks the set from
+`settingsState.clipboard.window.layout`. Keep event wiring, menus, preview and
+keyboard logic single-sourced inside these components instead of forking them.
+
+Horizontal `react-virtuoso` renders each item as `display: inline-block;
+height: 100%`. Percentage heights plus `aspect-square` resolve to zero width
+during shrink-to-fit, so `List` measures its root with a callback-ref
+`ResizeObserver` and writes explicit pixel `width`/`height` on each item
+wrapper. The list root mounts only after the initial load, so a mount-time
+`useEffect` would never see it.
+
 ## Virtualized Scrollbars
 
 Use `src/components/VirtuosoScroller` when wiring OverlayScrollbars into

@@ -119,6 +119,10 @@ fn load_states(path: &PathBuf) -> HashMap<String, WindowState> {
 /// 读取窗口当前的实时几何（`outer_position` + `inner_size`）并落盘。
 /// 在隐藏 / 关闭 / 退出等可靠生命周期点调用即可捕获用户的移动与缩放。
 pub fn save_window_state(app: &AppHandle, label: &str) -> Result<()> {
+    if label == super::CLIPBOARD_WINDOW_LABEL && super::is_clipboard_window_docked(app) {
+        return Ok(());
+    }
+
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| anyhow::anyhow!("window not found: {label}"))?;

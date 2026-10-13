@@ -59,6 +59,11 @@
     "searchPlaceholder": "搜索剪贴板...",
     "unpin": "取消固定"
   },
+  "meta": {
+    "characters": "{{count}} 字符",
+    "dimensions": "{{width}} × {{height}}",
+    "files": "{{count}} 个文件"
+  },
   "note": {
     "placeholder": "为这条记录添加备注...",
     "title": "编辑备注"
@@ -87,7 +92,8 @@
     "deleteSelected": "删除选中项",
     "favoriteSelected": "收藏 / 取消收藏",
     "focusSearch": "聚焦搜索框",
-    "navigate": "上下导航",
+    "navigate": "导航",
+    "navigateHorizontal": "左右导航",
     "noteSelected": "添加 / 编辑备注",
     "openPreference": "打开偏好设置窗口",
     "openSelected": "打开链接 / 邮箱 / 文件位置",

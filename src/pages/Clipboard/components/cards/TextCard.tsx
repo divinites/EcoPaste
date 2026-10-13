@@ -15,6 +15,10 @@ interface TextCardProps extends ClipboardItem {
    * 点击 URL / Email 文本时由列表层打开系统浏览器或邮件客户端。
    */
   onOpenLink?: () => void;
+  /**
+   * 停靠卡片填充模式：不按设置截断行数，由外层固定高度容器裁剪；颜色子类型渲染整块色板。
+   */
+  fill?: boolean;
 }
 
 /**
@@ -22,11 +26,14 @@ interface TextCardProps extends ClipboardItem {
  * 子类型（HTML/RTF/URL/Email/Color/Path）以小 Tag 提示。
  */
 const TextCard: FC<TextCardProps> = (props) => {
-  const { summary, subKind, colorPreview, isLinkActive, onOpenLink } = props;
+  const { summary, subKind, colorPreview, isLinkActive, onOpenLink, fill } =
+    props;
   const { keyword } = useSnapshot(clipboardViewState);
   const { clipboard } = useSnapshot(settingsState);
   const textMaxLines = clipboard.display.textMaxLines;
-  const lineClampClass = textLineClampClass(textMaxLines);
+  const lineClampClass = fill
+    ? "break-words"
+    : textLineClampClass(textMaxLines);
   const isOpenableLink =
     isLinkActive && (subKind === "url" || subKind === "email");
 
@@ -34,6 +41,19 @@ const TextCard: FC<TextCardProps> = (props) => {
     const style: CSSProperties = {
       background: colorPreview,
     };
+
+    if (fill) {
+      return (
+        <div
+          className="flex size-full items-end justify-center rounded-3 border border-ant-border-secondary p-2"
+          style={style}
+        >
+          <span className="rounded-full bg-ant-container px-2 py-0.5 font-mono text-xs">
+            {colorPreview}
+          </span>
+        </div>
+      );
+    }
 
     return (
       <div className="flex items-center gap-2 text-sm">

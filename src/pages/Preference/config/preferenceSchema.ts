@@ -1,4 +1,10 @@
 import { CAPTURE_KIND_OPTIONS } from "@/constants/captureKinds";
+import {
+  CLIPBOARD_WINDOW_LAYOUT,
+  CLIPBOARD_WINDOW_LAYOUT_OPTIONS,
+  DOCK_HEIGHT_PERCENT_MAX,
+  DOCK_HEIGHT_PERCENT_MIN,
+} from "@/constants/clipboardLayout";
 import { ITEM_ACTION_OPTIONS } from "@/constants/itemActions";
 import { LANGUAGE_OPTIONS } from "@/constants/languages";
 import {
@@ -429,6 +435,39 @@ export const preferenceTabs: PreferenceTab[] = [
         settings: [
           {
             control: {
+              options: CLIPBOARD_WINDOW_LAYOUT_OPTIONS,
+              type: "segmented",
+            },
+            id: "window.layout",
+            keywords: ["window", "layout", "dock", "bottom", "vertical"],
+            path: ["clipboard", "window", "layout"],
+            value: (settings) => {
+              return settings.clipboard.window.layout;
+            },
+          },
+          {
+            control: {
+              max: DOCK_HEIGHT_PERCENT_MAX,
+              min: DOCK_HEIGHT_PERCENT_MIN,
+              suffixKey: "percent",
+              type: "number",
+            },
+            disabledWhen: (settings) => {
+              return (
+                settings.clipboard.window.layout !==
+                CLIPBOARD_WINDOW_LAYOUT.DOCK
+              );
+            },
+            id: "window.dockHeightPercent",
+            keywords: ["window", "dock", "height", "percent", "ratio"],
+            parentId: "window.layout",
+            path: ["clipboard", "window", "dockHeightPercent"],
+            value: (settings) => {
+              return settings.clipboard.window.dockHeightPercent;
+            },
+          },
+          {
+            control: {
               options: [
                 { value: "followCursor" },
                 { value: "center" },
@@ -436,8 +475,15 @@ export const preferenceTabs: PreferenceTab[] = [
               ],
               type: "segmented",
             },
+            disabledWhen: (settings) => {
+              return (
+                settings.clipboard.window.layout ===
+                CLIPBOARD_WINDOW_LAYOUT.DOCK
+              );
+            },
             id: "window.position",
             keywords: ["window", "position", "cursor"],
+            parentId: "window.layout",
             path: ["clipboard", "window", "position"],
             value: (settings) => {
               return settings.clipboard.window.position;

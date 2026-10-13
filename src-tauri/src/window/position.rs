@@ -1,11 +1,16 @@
-use tauri::{PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{PhysicalPosition, PhysicalRect, PhysicalSize, WebviewWindow};
 
 use crate::core::Result;
 use crate::settings::WindowPosition;
 
+/// 底部停靠面板的最小逻辑高度，保证顶栏 + 一行卡片仍可容纳。
+const DOCK_MIN_LOGICAL_HEIGHT: f64 = 280.0;
+
 struct MonitorInfo {
     position: PhysicalPosition<i32>,
     size: PhysicalSize<u32>,
+    work_area: PhysicalRect<i32, u32>,
+    scale_factor: f64,
 }
 
 fn monitor_from_cursor(
@@ -28,6 +33,8 @@ fn monitor_from_cursor(
         MonitorInfo {
             position: *monitor.position(),
             size: *monitor.size(),
+            work_area: *monitor.work_area(),
+            scale_factor: monitor.scale_factor(),
         },
         cursor,
     )))
@@ -45,6 +52,57 @@ pub fn position_window(window: &WebviewWindow, position: WindowPosition) -> Resu
     }
 
     Ok(())
+}
+
+/// 底部停靠：贴光标所在显示器工作区底边、整宽，高度按百分比取自工作区高度。
+/// 使用 `work_area` 而非整屏尺寸，避免盖住 macOS Dock / Windows 任务栏。
+pub fn apply_dock(window: &WebviewWindow, height_percent: u8) -> Result<()> {
+    let Some((monitor, _)) = monitor_from_cursor(window)? else {
+        return Ok(());
+    };
+
+    let (size, position) = dock_geometry(&monitor.work_area, monitor.scale_factor, height_percent);
+
+    window.set_size(size).map_err(|e| anyhow::anyhow!(e))?;
+    window
+        .set_position(position)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(())
+}
+
+/// 计算停靠面板的物理尺寸与左上角位置。
+/// 高度不低于 [`DOCK_MIN_LOGICAL_HEIGHT`]，也不超过工作区高度；
+/// Windows 宽度减 1 像素，避免精确整宽被系统当作全屏窗口触发勿扰。
+fn dock_geometry(
+    work_area: &PhysicalRect<i32, u32>,
+    scale_factor: f64,
+    height_percent: u8,
+) -> (PhysicalSize<u32>, PhysicalPosition<i32>) {
+    let area_height = work_area.size.height as f64;
+    let min_height = (DOCK_MIN_LOGICAL_HEIGHT * scale_factor).round();
+    let height = (area_height * f64::from(height_percent) / 100.0)
+        .round()
+        .max(min_height)
+        .min(area_height) as u32;
+    let width = dock_width(work_area.size.width);
+
+    let x = work_area.position.x;
+    let y = work_area.position.y + (work_area.size.height - height) as i32;
+
+    (
+        PhysicalSize::new(width, height),
+        PhysicalPosition::new(x, y),
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn dock_width(area_width: u32) -> u32 {
+    area_width.saturating_sub(1)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn dock_width(area_width: u32) -> u32 {
+    area_width
 }
 
 fn apply_follow(
@@ -90,4 +148,50 @@ fn apply_center(window: &WebviewWindow, monitor: &MonitorInfo) -> Result<()> {
         .set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32))
         .map_err(|e| anyhow::anyhow!(e))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn work_area() -> PhysicalRect<i32, u32> {
+        PhysicalRect {
+            position: PhysicalPosition::new(0, 50),
+            size: PhysicalSize::new(2880, 1700),
+        }
+    }
+
+    #[test]
+    fn dock_geometry_uses_percent_of_work_area_and_sticks_to_bottom() {
+        let (size, position) = dock_geometry(&work_area(), 2.0, 40);
+
+        assert_eq!(size.height, 680);
+        assert_eq!(size.width, dock_width(2880));
+        assert_eq!(position.x, 0);
+        assert_eq!(position.y, 50 + 1700 - 680);
+    }
+
+    #[test]
+    fn dock_geometry_enforces_minimum_logical_height() {
+        let small = PhysicalRect {
+            position: PhysicalPosition::new(0, 0),
+            size: PhysicalSize::new(1440, 800),
+        };
+        let (size, position) = dock_geometry(&small, 1.0, 25);
+
+        assert_eq!(size.height, 280);
+        assert_eq!(position.y, 800 - 280);
+    }
+
+    #[test]
+    fn dock_geometry_never_exceeds_work_area_height() {
+        let tiny = PhysicalRect {
+            position: PhysicalPosition::new(0, 0),
+            size: PhysicalSize::new(800, 400),
+        };
+        let (size, position) = dock_geometry(&tiny, 2.0, 60);
+
+        assert_eq!(size.height, 400);
+        assert_eq!(position.y, 0);
+    }
 }

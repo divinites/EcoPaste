@@ -1,6 +1,9 @@
 import type { FC, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useSnapshot } from "valtio";
 import ScrollArea from "@/components/ScrollArea";
+import { CLIPBOARD_WINDOW_LAYOUT } from "@/constants/clipboardLayout";
+import { settingsState } from "@/stores/settings";
 import { getShortcutKeyDisplays, type ShortcutPattern } from "@/utils/shortcut";
 
 interface Shortcut {
@@ -22,7 +25,33 @@ const Kbd: FC<{ children: ReactNode }> = (props) => {
   );
 };
 
-const SHORTCUTS: Shortcut[] = [
+/**
+ * 按布局生成方向键条目：竖向列表上下导航、左右切分类；停靠横排则互换。
+ */
+function buildArrowShortcuts(isDock: boolean): Shortcut[] {
+  if (isDock) {
+    return [
+      {
+        keys: ["ArrowLeft", "/", "ArrowRight"],
+        labelKey: "shortcuts.navigateHorizontal",
+      },
+      {
+        keys: ["ArrowUp", "/", "ArrowDown"],
+        labelKey: "shortcuts.switchCategory",
+      },
+    ];
+  }
+
+  return [
+    { keys: ["ArrowUp", "/", "ArrowDown"], labelKey: "shortcuts.navigate" },
+    {
+      keys: ["ArrowLeft", "/", "ArrowRight"],
+      labelKey: "shortcuts.switchCategory",
+    },
+  ];
+}
+
+const LEADING_SHORTCUTS: Shortcut[] = [
   { keys: "Enter", labelKey: "shortcuts.pasteSelected" },
   { keys: "CmdOrCtrl+Enter", labelKey: "shortcuts.pasteSelectedPlain" },
   { keys: ["CmdOrCtrl", "1-0"], labelKey: "shortcuts.pasteNth" },
@@ -36,13 +65,11 @@ const SHORTCUTS: Shortcut[] = [
     keys: ["CmdOrCtrl", "Backspace"],
     labelKey: "shortcuts.deleteSelected",
   },
-  { keys: ["ArrowUp", "/", "ArrowDown"], labelKey: "shortcuts.navigate" },
+];
+
+const TRAILING_SHORTCUTS: Shortcut[] = [
   { keys: "CmdOrCtrl+F", labelKey: "shortcuts.focusSearch" },
   { keys: "CmdOrCtrl+Q", labelKey: "shortcuts.toggleRange" },
-  {
-    keys: ["ArrowLeft", "/", "ArrowRight"],
-    labelKey: "shortcuts.switchCategory",
-  },
   {
     keys: ["Tab", "/", "Shift", "Tab"],
     labelKey: "shortcuts.switchCustomGroup",
@@ -63,13 +90,20 @@ const SHORTCUTS: Shortcut[] = [
  */
 const ShortcutList: FC = () => {
   const { t } = useTranslation("clipboard");
+  const { clipboard } = useSnapshot(settingsState);
+  const isDock = clipboard.window.layout === CLIPBOARD_WINDOW_LAYOUT.DOCK;
+  const shortcuts = [
+    ...LEADING_SHORTCUTS,
+    ...buildArrowShortcuts(isDock),
+    ...TRAILING_SHORTCUTS,
+  ];
 
   return (
     <ScrollArea
       className="-mx-3 max-h-120 w-72 px-3"
       contentClassName="flex flex-col gap-1"
     >
-      {SHORTCUTS.map((item) => (
+      {shortcuts.map((item) => (
         <div
           className="flex items-center justify-between gap-3 px-1 py-1"
           key={item.labelKey}

@@ -89,6 +89,95 @@ Correct:
 { "clipboard": { "window": { "selectGroupOnOpen": "group:550e8400-e29b" } } }
 ```
 
+### Scenario: Clipboard Window Layout (Dock vs Vertical)
+
+#### 1. Scope / Trigger
+
+Changing how the clipboard window is laid out on screen is a settings contract
+plus a window-geometry change. Rust owns the persisted shape, the geometry, the
+state-file guard, and the preview placement preference; React only switches
+renderers.
+
+#### 2. Signatures
+
+- Rust fields:
+  - `Window.layout: ClipboardWindowLayout` (`Vertical | Dock`, default `Dock`)
+  - `Window.dock_height_percent: u8` (default `40`)
+  - `settings::DOCK_HEIGHT_PERCENT_RANGE: RangeInclusive<u8> = 25..=60`
+- Rust geometry:
+  - `window::position::apply_dock(window, height_percent) -> Result<()>`
+  - `window::is_clipboard_window_docked(app) -> bool`
+  - `window::preview::resolve_panel_rect(source, overlay, prefer_top)`
+- List payload:
+  - `ClipboardItem.char_count: Option<i64>` computed by `LIST_SELECT_ITEM` as
+    `length(content)` for `kind = 'text'` before `content` is blanked.
+- TypeScript mirror:
+  - `Window.layout: "vertical" | "dock"`, `Window.dockHeightPercent: number`
+  - `src/constants/clipboardLayout.ts` holds `CLIPBOARD_WINDOW_LAYOUT`,
+    `DOCK_HEIGHT_PERCENT_MIN / MAX`.
+  - `ClipboardItem.charCount?: number`
+
+#### 3. Contracts
+
+- `Dock`: before every show, `apply_clipboard_window_layout` clears the minimum
+  size, then `apply_dock` places the window on the cursor monitor's
+  `work_area()` (never the full monitor): full work-area width (Windows: width
+  minus 1 px to avoid full-screen detection), height =
+  `max(work_area.height * percent / 100, 280 logical px)` clamped to the work
+  area, bottom edge flush with the work area. `position` is ignored.
+- `Vertical`: restores `LogicalSize 360x600` as the minimum (matches
+  `tauri.conf.json`), then runs the pre-existing restore + `position` logic.
+- `state::save_window_state` returns early for the clipboard label while
+  docked, so `window-state.json` never stores dock geometry and switching back
+  to `Vertical` restores the user's remembered size.
+- `show_clipboard_preview` passes `prefer_top = is_clipboard_window_docked`;
+  docked previews try `Top` first, otherwise the legacy `Right, Left, Bottom, Top`
+  order.
+- Missing fields in an older `settings.json` fall back to `Dock` / `40` via
+  `#[serde(default)]`; no migration marker is written.
+
+#### 4. Validation & Error Matrix
+
+- `dock_height_percent` outside `25..=60` ->
+  `AppError::Other("dock height percent must be between 25 and 60")`.
+- Unknown `layout` string -> serde deserialization error (closed enum).
+- Settings store missing at show time -> layout step is skipped, window shows
+  with its current geometry.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: 40 % on a 1080p work area yields a 394 px panel above the Dock, cards
+  are squares sized from the list height.
+- Base: an old config without the fields opens docked at 40 %; the preference
+  page shows `Panel Layout = Bottom Dock`.
+- Bad: persisting dock geometry on hide would overwrite the vertical window's
+  remembered 360x600 size; the `save_window_state` guard exists for this.
+
+#### 6. Tests Required
+
+- `settings::store` tests: defaults (`Dock`, `40`) and the 24/25/60/61
+  boundary matrix.
+- `window::position` tests: percent of work area, 280 px logical minimum with
+  scale factor, never taller than the work area.
+- `window::preview` test: `prefer_top` returns `Top` when space exists above.
+- `db::items` test: list view sets `char_count` for text only, single-item
+  SELECT leaves it `None`.
+- Manual: both layouts on macOS, preference window controls, old config file.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```rust
+let (size, position) = dock_geometry(monitor.size(), ...); // covers the Dock / taskbar
+```
+
+Correct:
+
+```rust
+let (size, position) = dock_geometry(monitor.work_area(), scale, percent);
+```
+
 ## Settings Events and Mirrors
 
 Rust is the source of truth. `commands::settings::update_settings` and

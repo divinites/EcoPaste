@@ -52,6 +52,8 @@ export type CaptureKind = "files" | "image" | "html" | "rtf" | "text";
 
 export type RetentionUnit = "hours" | "days" | "weeks" | "months" | "forever";
 
+export type ClipboardWindowLayout = "vertical" | "dock";
+
 export type WindowPosition = "remember" | "followCursor" | "center";
 
 export type WindowOpenRangeSelection = "preserve" | ClipboardRange;
@@ -147,6 +149,8 @@ export interface Search {
 }
 
 export interface Window {
+  layout: ClipboardWindowLayout;
+  dockHeightPercent: number;
   position: WindowPosition;
   scrollToTopOnOpen: boolean;
   selectRangeOnOpen: WindowOpenRangeSelection;

@@ -1,6 +1,6 @@
 import { useUnmount } from "ahooks";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { FC, MouseEvent, SyntheticEvent } from "react";
+import type { FC, MouseEvent, ReactNode, SyntheticEvent } from "react";
 import { useRef, useState } from "react";
 import Tooltip from "@/components/Tooltip";
 import {
@@ -19,6 +19,10 @@ interface ClipboardQuickActionsProps {
   onQuickAction?: (action: ItemAction) => Promise<void> | void;
   quickActions: ItemAction[];
   visible: boolean;
+  /**
+   * 动作栏未展开时占位显示的内容；默认是条目时间，停靠卡片传入元信息或 null。
+   */
+  placeholder?: ReactNode;
 }
 
 interface QuickActionButtonProps {
@@ -32,10 +36,14 @@ interface QuickActionButtonProps {
 }
 
 /**
- * 在卡片 meta 右侧展示时间，并在 hover 时替换为当前条目可执行的快捷动作。
+ * 在卡片 meta 右侧展示占位内容（默认为时间），并在 hover 时替换为当前条目可执行的快捷动作。
  */
 const ClipboardQuickActions: FC<ClipboardQuickActionsProps> = (props) => {
   const { item, labels, onQuickAction, quickActions, visible } = props;
+  const placeholder =
+    "placeholder" in props
+      ? props.placeholder
+      : (item.displayCreatedAt ?? item.createdAt);
   const shouldReduceMotion = useReducedMotion();
   const availableActions = filterAvailableItemActions(quickActions, item);
   const enabled =
@@ -57,7 +65,7 @@ const ClipboardQuickActions: FC<ClipboardQuickActionsProps> = (props) => {
           },
         )}
       >
-        {item.displayCreatedAt ?? item.createdAt}
+        {placeholder}
       </span>
 
       {enabled && onQuickAction && labels ? (

@@ -64,6 +64,7 @@
       "items": "条",
       "lines": "行",
       "mb": "MB",
+      "percent": "%",
       "px": "px",
       "seconds": "秒"
     },
@@ -582,9 +583,21 @@
         }
       },
       "window": {
+        "dockHeightPercent": {
+          "description": "底部停靠面板占屏幕可用高度的百分比，卡片随面板高度等比缩放。",
+          "title": "停靠面板高度"
+        },
         "idleDestroySeconds": {
           "description": "偏好设置、预览和右键菜单等非剪贴板窗口隐藏超过此时间后释放 WebView，下次使用时自动重建。",
           "title": "非剪贴板窗口空闲释放"
+        },
+        "layout": {
+          "description": "底部停靠：从屏幕底部整宽弹出，卡片横向排列；竖向窗口：传统小窗竖向列表。",
+          "options": {
+            "dock": "底部停靠",
+            "vertical": "竖向窗口"
+          },
+          "title": "面板布局"
         },
         "lightweightMode": {
           "description": "隐藏剪贴板窗口后暂停无谓刷新，非剪贴板窗口空闲后释放渲染资源。",

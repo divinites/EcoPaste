@@ -12,17 +12,25 @@ import ImageCard from "./ImageCard";
  * 前端只按 kind 分支渲染：`imagePreview` 走单图预览，`list` 走文件列表；
  * 路径已删除（`exists = false`）的条目一律走 list 并对文件名划删除线。
  */
-const FilesCard: FC<ClipboardItem> = (props) => {
-  const entries = props.fileEntries ?? [];
+interface FilesCardProps extends ClipboardItem {
+  /**
+   * 停靠卡片填充模式：单图预览铺满主体，文件列表行距放大。
+   */
+  fill?: boolean;
+}
+
+const FilesCard: FC<FilesCardProps> = (props) => {
+  const { fill, ...item } = props;
+  const entries = item.fileEntries ?? [];
   const { keyword } = useSnapshot(clipboardViewState);
 
-  if (props.filesPreviewKind === "imagePreview") {
+  if (item.filesPreviewKind === "imagePreview") {
     const [first] = entries;
-    return <ImageCard {...props} imageThumbnailPath={first?.path} />;
+    return <ImageCard {...item} fill={fill} imageThumbnailPath={first?.path} />;
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col", { "gap-1": !fill, "gap-2": fill })}>
       {entries.map((entry) => {
         return <FileRow entry={entry} key={entry.path} keyword={keyword} />;
       })}

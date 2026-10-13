@@ -21,7 +21,9 @@ import { WINDOW_LABEL } from "@/constants/windows";
 import { useTauriListen } from "@/hooks/useTauriListen";
 import { clipboardViewState } from "@/stores/clipboardView";
 import { settingsState } from "@/stores/settings";
+import { cn } from "@/utils/cn";
 import { formatShortcutDisplay } from "@/utils/shortcut";
+import Group from "./Group";
 import SearchInput from "./SearchInput";
 
 interface WindowVisibilityPayload {
@@ -31,13 +33,26 @@ interface WindowVisibilityPayload {
 
 type HeaderMoreMenuKey = "clear" | "preference";
 
+export type HeaderVariant = "compact" | "dock";
+
+interface HeaderProps {
+  /**
+   * `compact`：竖向窗口顶部条，分组栏由页面另起一行渲染；
+   * `dock`：停靠面板单行顶栏，分组标签内嵌在搜索框与窗口操作之间。
+   */
+  variant?: HeaderVariant;
+}
+
 const MORE_ACTION_TRIGGER: AppDropdownProps["trigger"] = ["click"];
 const PREFERENCE_SHORTCUT = formatShortcutDisplay("CmdOrCtrl+,", " ");
 
 /**
- * 剪贴板窗口顶部条：logo、搜索框（⌘F / Ctrl+F 聚焦）、固定窗口与更多操作入口。
+ * 剪贴板窗口顶部条：logo、搜索框（⌘F / Ctrl+F 聚焦）、固定窗口与更多操作入口；
+ * 停靠变体额外在中间内嵌分组标签栏。
  */
-const Header: FC = () => {
+const Header: FC<HeaderProps> = (props) => {
+  const { variant = "compact" } = props;
+  const isDock = variant === "dock";
   const { t } = useTranslation("clipboard");
   const settings = useSnapshot(settingsState);
   const [pinned, setPinned] = useState(false);
@@ -178,24 +193,38 @@ const Header: FC = () => {
     },
   ];
 
+  const searchInput = (
+    <SearchInput
+      allowClear
+      blurToken={searchBlurToken}
+      className={cn({ "w-40": !isDock, "w-56": isDock })}
+      clearToken={searchClearToken}
+      focusToken={searchFocusToken}
+      onChange={handleKeywordChange}
+      placeholder={t("header.searchPlaceholder")}
+      size="small"
+    />
+  );
+
   return (
     <div
-      className="flex items-center justify-between p-3 pb-2"
+      className={cn("flex items-center", {
+        "gap-3 px-4 pt-3 pb-2": isDock,
+        "justify-between p-3 pb-2": !isDock,
+      })}
       data-tauri-drag-region
     >
       <img alt={t("header.logoAlt")} className="size-5" src="/logo.png" />
 
+      {isDock ? (
+        <>
+          {searchInput}
+          <Group variant="tab" />
+        </>
+      ) : null}
+
       <div className="flex items-center gap-1">
-        <SearchInput
-          allowClear
-          blurToken={searchBlurToken}
-          className="w-40"
-          clearToken={searchClearToken}
-          focusToken={searchFocusToken}
-          onChange={handleKeywordChange}
-          placeholder={t("header.searchPlaceholder")}
-          size="small"
-        />
+        {isDock ? null : searchInput}
 
         <Tooltip title={t(pinned ? "header.unpin" : "header.pin")}>
           <CustomIconButton

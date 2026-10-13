@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "lint、i18n 双语完整性、UI 实操验证清单"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 settings / clipboard 类型镜像与常量集中维护是否同步"}
+{"file": ".trellis/spec/backend/settings-window-platform.md", "reason": "核对设置校验、窗口状态存档隔离、平台分支是否符合规范"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "逐项核对 Rust 模型、TS 类型、preferenceSchema、zh-CN / en-US 文案是否全部更新"}

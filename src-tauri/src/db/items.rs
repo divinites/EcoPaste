@@ -30,6 +30,7 @@ const LIST_SELECT_ITEM: &str = "SELECT clipboard_items.id, clipboard_items.kind,
      clipboard_items.is_sensitive, \
      clipboard_items.platform, clipboard_items.note, \
      clipboard_items.created_at, clipboard_items.updated_at, \
+     CASE WHEN clipboard_items.kind = 'text' THEN length(clipboard_items.content) ELSE NULL END AS char_count, \
      clipboard_apps.name AS source_app_name, \
      clipboard_apps.icon_file AS source_app_icon_file \
      FROM clipboard_items \
@@ -601,6 +602,7 @@ mod tests {
             available_actions: Vec::new(),
             color_preview: None,
             display_created_at: String::new(),
+            char_count: None,
         }
     }
 
@@ -623,6 +625,40 @@ mod tests {
         assert_eq!(found.use_count, 1);
 
         assert!(find_item_by_id(&pool, "missing").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn list_view_reports_char_count_for_text_only() {
+        let pool = memory_pool().await;
+        let mut text = sample_item("text");
+        text.content = "你好 world".to_owned();
+        text.content_hash = content_hash(ClipboardKind::Text, &text.content);
+        insert_item(&pool, &text).await.unwrap();
+
+        let mut image = sample_item("image");
+        image.kind = ClipboardKind::Image;
+        image.content = "abc.png".to_owned();
+        image.content_hash = content_hash(ClipboardKind::Image, &image.content);
+        insert_item(&pool, &image).await.unwrap();
+
+        let listed_text = find_item_for_list_by_id(&pool, "text")
+            .await
+            .unwrap()
+            .expect("text item should exist");
+        assert_eq!(listed_text.char_count, Some(8));
+        assert!(
+            listed_text.content.is_empty(),
+            "list view trims text content"
+        );
+
+        let listed_image = find_item_for_list_by_id(&pool, "image")
+            .await
+            .unwrap()
+            .expect("image item should exist");
+        assert_eq!(listed_image.char_count, None);
+
+        let full = find_item_by_id(&pool, "text").await.unwrap().unwrap();
+        assert_eq!(full.char_count, None, "single SELECT path leaves it unset");
     }
 
     #[tokio::test]

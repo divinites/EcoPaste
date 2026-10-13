@@ -20,7 +20,10 @@ use tauri::{
 
 use crate::core::Result;
 
-use super::{get_window, lifecycle, CLIPBOARD_PREVIEW_WINDOW_LABEL, CLIPBOARD_WINDOW_LABEL};
+use super::{
+    get_window, is_clipboard_window_docked, lifecycle, CLIPBOARD_PREVIEW_WINDOW_LABEL,
+    CLIPBOARD_WINDOW_LABEL,
+};
 
 #[cfg(target_os = "macos")]
 use tauri_nspanel::{tauri_panel, ManagerExt, PanelLevel, WebviewWindowExt};
@@ -149,7 +152,14 @@ pub fn show_clipboard_preview(
     let work_area = preview_overlay_bounds(&monitor);
     let scale_factor = monitor.scale_factor();
     let clipboard_window = clipboard_window_rect(app);
-    let layout = build_preview_layout(&anchor, scale_factor, &work_area, clipboard_window.as_ref());
+    let prefer_top = is_clipboard_window_docked(app);
+    let layout = build_preview_layout(
+        &anchor,
+        scale_factor,
+        &work_area,
+        clipboard_window.as_ref(),
+        prefer_top,
+    );
 
     prepare_preview_window_for_show(app, &window, &work_area)?;
 
@@ -587,11 +597,13 @@ fn preview_window_size(work_area: &PhysicalRect<i32, u32>) -> PhysicalSize<u32> 
     }
 }
 
+/// `prefer_top` 为 true（底部停靠布局）时优先把预览放到卡片上方，避免盖住横排的相邻卡片。
 fn build_preview_layout(
     anchor: &PreviewAnchorRect,
     scale_factor: f64,
     work_area: &PhysicalRect<i32, u32>,
     clipboard_window: Option<&PreviewClipboardWindowRect>,
+    prefer_top: bool,
 ) -> PreviewLayout {
     let overlay_rect = PreviewRect {
         left: 0.0,
@@ -606,7 +618,7 @@ fn build_preview_layout(
         clipboard_window,
         overlay_rect,
     );
-    let (panel_rect, placement) = resolve_panel_rect(source_rect, overlay_rect);
+    let (panel_rect, placement) = resolve_panel_rect(source_rect, overlay_rect, prefer_top);
 
     PreviewLayout {
         overlay_rect,
@@ -672,35 +684,43 @@ fn resolve_pointer_anchor_rect(source: PreviewRect, pointer_y: Option<f64>) -> P
 fn resolve_panel_rect(
     source_rect: PreviewRect,
     overlay_rect: PreviewRect,
+    prefer_top: bool,
 ) -> (PreviewRect, PreviewPlacement) {
     let panel_size = (PREVIEW_PANEL_WIDTH, PREVIEW_PANEL_HEIGHT);
-    let candidates = [
-        (
-            PreviewPlacement::Right,
-            source_rect.right() + PREVIEW_PANEL_GAP + PREVIEW_PANEL_WIDTH + PREVIEW_PANEL_MARGIN
-                <= overlay_rect.right(),
-        ),
-        (
-            PreviewPlacement::Left,
-            source_rect.left - PREVIEW_PANEL_GAP - PREVIEW_PANEL_WIDTH - PREVIEW_PANEL_MARGIN
-                >= overlay_rect.left,
-        ),
-        (
-            PreviewPlacement::Bottom,
-            source_rect.bottom() + PREVIEW_PANEL_GAP + PREVIEW_PANEL_HEIGHT + PREVIEW_PANEL_MARGIN
-                <= overlay_rect.bottom(),
-        ),
-        (
-            PreviewPlacement::Top,
-            source_rect.top - PREVIEW_PANEL_GAP - PREVIEW_PANEL_HEIGHT - PREVIEW_PANEL_MARGIN
-                >= overlay_rect.top,
-        ),
-    ];
+    let right = (
+        PreviewPlacement::Right,
+        source_rect.right() + PREVIEW_PANEL_GAP + PREVIEW_PANEL_WIDTH + PREVIEW_PANEL_MARGIN
+            <= overlay_rect.right(),
+    );
+    let left = (
+        PreviewPlacement::Left,
+        source_rect.left - PREVIEW_PANEL_GAP - PREVIEW_PANEL_WIDTH - PREVIEW_PANEL_MARGIN
+            >= overlay_rect.left,
+    );
+    let bottom = (
+        PreviewPlacement::Bottom,
+        source_rect.bottom() + PREVIEW_PANEL_GAP + PREVIEW_PANEL_HEIGHT + PREVIEW_PANEL_MARGIN
+            <= overlay_rect.bottom(),
+    );
+    let top = (
+        PreviewPlacement::Top,
+        source_rect.top - PREVIEW_PANEL_GAP - PREVIEW_PANEL_HEIGHT - PREVIEW_PANEL_MARGIN
+            >= overlay_rect.top,
+    );
+    let candidates = if prefer_top {
+        [top, right, left, bottom]
+    } else {
+        [right, left, bottom, top]
+    };
 
     let placement = candidates
         .iter()
         .find_map(|(placement, fits)| fits.then_some(*placement))
-        .unwrap_or(PreviewPlacement::Right);
+        .unwrap_or(if prefer_top {
+            PreviewPlacement::Top
+        } else {
+            PreviewPlacement::Right
+        });
     let raw = raw_panel_rect(source_rect, placement, panel_size);
 
     (
@@ -837,7 +857,7 @@ mod tests {
             width: 120.0,
             height: 40.0,
         };
-        let (panel, placement) = resolve_panel_rect(source, overlay());
+        let (panel, placement) = resolve_panel_rect(source, overlay(), false);
 
         assert!(matches!(placement, PreviewPlacement::Right));
         assert!(panel.left > source.right());
@@ -851,10 +871,24 @@ mod tests {
             width: 120.0,
             height: 40.0,
         };
-        let (panel, placement) = resolve_panel_rect(source, overlay());
+        let (panel, placement) = resolve_panel_rect(source, overlay(), false);
 
         assert!(matches!(placement, PreviewPlacement::Left));
         assert!(panel.right() < source.left);
+    }
+
+    #[test]
+    fn prefers_top_for_docked_clipboard_window() {
+        let source = PreviewRect {
+            left: 240.0,
+            top: 600.0,
+            width: 160.0,
+            height: 160.0,
+        };
+        let (panel, placement) = resolve_panel_rect(source, overlay(), true);
+
+        assert!(matches!(placement, PreviewPlacement::Top));
+        assert!(panel.bottom() <= source.top);
     }
 
     #[test]
@@ -865,7 +899,7 @@ mod tests {
             width: 80.0,
             height: 40.0,
         };
-        let (panel, _) = resolve_panel_rect(source, overlay());
+        let (panel, _) = resolve_panel_rect(source, overlay(), false);
 
         assert!(panel.left >= PREVIEW_PANEL_MARGIN);
         assert!(panel.top >= PREVIEW_PANEL_MARGIN);
