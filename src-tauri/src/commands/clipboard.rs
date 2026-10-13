@@ -407,6 +407,8 @@ pub async fn paste_clipboard_item(
     id: String,
     plain: bool,
 ) -> Result<()> {
+    ensure_paste_permission(&app).await?;
+
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
@@ -736,6 +738,32 @@ fn attach_display_created_at(item: &mut ClipboardItem, now: &chrono::DateTime<Lo
     } else {
         local.format("%Y-%m-%d %H:%M").to_string()
     };
+}
+
+/// macOS 模拟粘贴依赖辅助功能权限；未授权时 CGEvent 会被系统静默丢弃，用户只看到"没反应"。
+/// 这里先弹系统授权请求，再返回可读错误让前端 toast 提示；写回剪贴板也一并跳过，
+/// 避免用户误以为已粘贴。Windows 无此权限模型，直接放行。
+async fn ensure_paste_permission(app: &AppHandle) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        if tauri_plugin_macos_permissions::check_accessibility_permission().await {
+            return Ok(());
+        }
+
+        tauri_plugin_macos_permissions::request_accessibility_permission().await;
+
+        let lang = crate::i18n::current_language(app);
+        Err(AppError::Clipboard(
+            crate::i18n::commands::label(lang, crate::i18n::commands::Key::AccessibilityRequired)
+                .to_owned(),
+        ))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(())
+    }
 }
 
 /// 按 `kind` / `sub_kind` 计算右键菜单可用动作，按建议展示顺序返回。

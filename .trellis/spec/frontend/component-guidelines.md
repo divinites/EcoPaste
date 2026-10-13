@@ -95,6 +95,11 @@ adding extra DOM wrappers or global `.ant-*` overrides.
 `settingsState.clipboard.window.layout`. Keep event wiring, menus, preview and
 keyboard logic single-sourced inside these components instead of forking them.
 
+`VirtuosoHandle.scrollBy` / `scrollTo` in `horizontalDirection` mode read only
+`top` and translate it to `left`; an object with just `left` is rebuilt as an
+empty options object and scrolls nothing. Always pass `{ top: delta }` for a
+horizontal list (`List.tsx:handleWheel` maps mouse-wheel `deltaY` this way).
+
 Horizontal `react-virtuoso` renders each item as `display: inline-block;
 height: 100%`. Percentage heights plus `aspect-square` resolve to zero width
 during shrink-to-fit, so `List` measures its root with a callback-ref

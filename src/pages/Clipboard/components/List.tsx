@@ -801,12 +801,13 @@ const List: FC<ListProps> = (props) => {
   /**
    * 横向列表把普通鼠标滚轮的纵向滚动量转为横向滚动；触控板的横向手势已带 deltaX，原样交给浏览器。
    * React 的 wheel 监听是 passive 的，这里不调用 preventDefault；横向滚动容器本身没有纵向可滚区域。
+   * Virtuoso 横向模式的 `scrollBy` 只读取 `top` 并映射成 `left`，传 `left` 会被整体丢弃成空对象。
    */
   const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     if (!isHorizontal) return;
     if (event.deltaX !== 0 || event.deltaY === 0) return;
 
-    virtuosoRef.current?.scrollBy({ left: event.deltaY });
+    virtuosoRef.current?.scrollBy({ top: event.deltaY });
   };
 
   const handleAtTopStateChange = (atTop: boolean) => {

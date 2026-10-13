@@ -21,6 +21,7 @@ pub enum ClipboardMenuKey {
 
 #[derive(Debug, Clone, Copy)]
 pub enum CommandKey {
+    AccessibilityRequired,
     DragSourceFilesMissing,
     DragImageMissing,
     DragTextEmpty,

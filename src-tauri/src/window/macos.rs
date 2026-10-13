@@ -121,7 +121,9 @@ pub fn handle_reopen(app_handle: &AppHandle, has_visible_windows: bool) {
         }
     }
 
-    if let Err(err) = show_window(app_handle, PREFERENCE_WINDOW_LABEL) {
+    // 必须走顶层 `window::show_window`：preference 是 DestroyWhenIdle 窗口，
+    // 模块内 `show_window` 不会按 descriptor 重建，冷启动或空闲销毁后会报 window not found。
+    if let Err(err) = super::show_window(app_handle, PREFERENCE_WINDOW_LABEL) {
         log::error!("show preference window on reopen failed: {err:?}");
     }
 }

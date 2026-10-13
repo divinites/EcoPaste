@@ -241,6 +241,19 @@ const Header: FC<HeaderProps> = (props) => {
           />
         </Tooltip>
 
+        {isDock ? (
+          <Tooltip title={t("header.openPreference")}>
+            <CustomIconButton
+              icon={
+                <i aria-hidden="true" className="i-lucide:settings text-base" />
+              }
+              onClick={handleOpenPreference}
+              size="small"
+              type="text"
+            />
+          </Tooltip>
+        ) : null}
+
         <Dropdown
           menu={{ items: moreMenuItems, onClick: handleMoreMenuClick }}
           tooltip={t("header.moreActions")}

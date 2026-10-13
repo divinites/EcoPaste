@@ -177,8 +177,37 @@ pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     if result.is_ok() {
         emit_visibility(app_handle, label, false);
         lifecycle::on_hidden(app_handle, label, "hide");
+        sync_dock_icon_after_hide(app_handle, label);
     }
     result
+}
+
+/// 非剪贴板窗口（偏好设置、引导、更新）显示时 macOS 会把进程提升为前台应用并出现 Dock 图标；
+/// 窗口隐藏或关闭后按 `general.dock_icon` 重新收回，否则图标会一直残留在 Dock 里。
+fn sync_dock_icon_after_hide(app_handle: &AppHandle, label: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        if label == CLIPBOARD_WINDOW_LABEL {
+            return;
+        }
+
+        let Some(store) = app_handle.try_state::<SettingsStore>() else {
+            return;
+        };
+
+        if store.snapshot().general.dock_icon {
+            return;
+        }
+
+        if let Err(err) = show_taskbar_icon(app_handle, false) {
+            log::warn!("re-hide dock icon after {label} hidden failed: {err}");
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app_handle, label);
+    }
 }
 
 pub fn toggle_window(app_handle: &AppHandle, label: &str) -> Result<()> {
@@ -296,6 +325,7 @@ pub fn intercept_close_request(window: &Window) -> bool {
     } else {
         emit_visibility(window.app_handle(), window.label(), false);
         lifecycle::on_hidden(window.app_handle(), window.label(), "close");
+        sync_dock_icon_after_hide(window.app_handle(), window.label());
     }
     true
 }

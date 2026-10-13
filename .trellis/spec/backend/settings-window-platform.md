@@ -283,6 +283,44 @@ Correct:
 if (event.payload.label !== WINDOW_LABEL.CLIPBOARD) return;
 ```
 
+### Scenario: Showing a DestroyWhenIdle Window from Platform Code
+
+#### 1. Scope / Trigger
+
+Any native entry point that opens the preference (or another
+`RetainPolicy::DestroyWhenIdle`) window: Dock reopen, tray, URL handlers.
+
+#### 2. Signatures
+
+- `window::show_window(app_handle, label) -> Result<()>` (top level, rebuilds
+  via `lifecycle::rebuild_fn` when the webview was destroyed or never built)
+- `window::macos::show_window` / `window::windows::show_window` (platform
+  show only; assume the window exists)
+
+#### 3. Contracts
+
+- Platform modules call `super::show_window` for user-facing entry points.
+  Inside `window/macos.rs` a bare `show_window(...)` resolves to the module-local
+  function and fails with `window not found: <label>` on a cold start or after
+  idle destroy. `handle_reopen` hit exactly this until the dock-panel fix.
+- `paste_clipboard_item` calls `ensure_paste_permission` first: on macOS a
+  missing Accessibility grant triggers the system prompt and returns
+  `AppError::Clipboard(i18n commands::AccessibilityRequired)`; CGEvent posts are
+  otherwise dropped silently and the user sees nothing. Note that a dev binary
+  launched from a terminal inherits the terminal's Accessibility grant, so the
+  prompt path can only be exercised with the installed `.app`.
+
+#### 4. Validation & Error Matrix
+
+- Preference window destroyed + platform-local show -> `window not found`.
+- Accessibility missing -> system prompt + localized toast, clipboard untouched.
+
+#### 5. Tests Required
+
+- Manual: `open -a /Applications/EcoPaste.app` while running opens preferences
+  with no `window not found` log line; first paste without the grant shows the
+  prompt and the toast.
+
 ## Pending-Slot Pattern
 
 When an event targets a destroyable preference window, use a Rust pending slot
