@@ -10,6 +10,7 @@ mod i18n;
 #[cfg(target_os = "windows")]
 mod keyboard;
 mod keystroke;
+mod legacy;
 mod menu;
 #[cfg(target_os = "windows")]
 mod mouse;

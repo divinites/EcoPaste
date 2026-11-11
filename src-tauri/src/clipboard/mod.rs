@@ -3,6 +3,7 @@ mod apps_registry;
 mod cleanup;
 mod detect;
 mod file_icon_store;
+mod groups;
 mod guard;
 mod icon;
 mod ingest;
@@ -12,6 +13,7 @@ mod secrets;
 mod sound;
 mod source;
 mod storage;
+mod view;
 mod watcher;
 mod write;
 
@@ -21,6 +23,9 @@ pub use apps_registry::{
 };
 pub use detect::sanitize_css_color;
 pub use file_icon_store::FileIconStore;
+pub use groups::{
+    normalize_group_icon, normalize_group_name, normalize_group_svg, MAX_GROUP_ICON_BYTES,
+};
 pub use guard::WritebackGuard;
 pub use icon::{get_icon_cache_key, icon_png, DIR_CACHE_KEY};
 #[cfg(test)]
@@ -31,6 +36,11 @@ pub use read::ClipboardReader;
 pub use sound::play_copy_sound;
 pub use source::detect_frontmost;
 pub use storage::ImageStore;
+pub use view::{
+    build_clipboard_app_view, build_clipboard_preview_payload, default_saved_image_file_name,
+    enrich_list_item, merge_clipboard_apps, resolve_file_icon_path, sort_clipboard_apps,
+    validate_image_file_name, ClipboardAppView, ClipboardPreviewPayload, ListItemContext,
+};
 pub use watcher::{init, materialize_source, persist_and_notify, WatcherPause};
 pub use write::write_to_clipboard;
 

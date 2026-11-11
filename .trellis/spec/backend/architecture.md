@@ -34,14 +34,26 @@ storage flows.
 
 Examples:
 - `commands::clipboard::list_clipboard_items` reads settings, queries
-  `db::items::query_items_page`, attaches thumbnails, file entries, source app
-  icons, color previews, display timestamps, redaction, and action lists.
+  `db::items::query_items_page`, then calls `clipboard::view::enrich_list_item`
+  which attaches thumbnails, file entries, source app icons, color previews,
+  display timestamps, redaction, and action lists. Preview payloads, app views
+  and image file-name validation also live in `clipboard/view.rs`.
+- Group name / icon validation lives in `clipboard/groups.rs`.
+- Legacy v0.x detection and import live in `legacy/`; the onboarding command
+  only syncs settings and emits one `clipboard://updated` after the batch.
+  Bulk imports must not call `persist_and_notify` per row (it plays the copy
+  sound and emits for every item).
 - `clipboard::persist_and_notify` is shared by the OS watcher and
   `read_clipboard`, so manual and automatic capture have the same dedupe and
   event semantics.
 - `settings::SettingsStore::update` performs deep merge, validation, and atomic
   persistence; `commands::settings::update_settings` adds side effects and emits
   `settings://updated`.
+
+User-visible Rust errors use `AppError::localized(Key)` /
+`AppError::localized_with(Key, detail)` with keys in `i18n/keys.rs`; the message
+is rendered in the active UI language mirrored by `SettingsStore`. Do not put
+Chinese or English literals in `AppError::Clipboard` for user-facing messages.
 
 Avoid moving these decisions into React. If the frontend starts checking whether
 an item can reveal in Finder, parsing file entries, or deciding sensitive

@@ -66,6 +66,7 @@ src-tauri/
     menu/       # 列表项右键菜单（macOS muda / Windows webview 窗）
     drag_out/   # OS 级拖出（文件/图片/文本拖到外部应用）
     backup/     # .ecopastebak 历史备份导出与接收
+    legacy/     # 旧版（v0.x）数据检测与导入
     i18n/       # Rust 侧用户可见文案（托盘、菜单、命令 toast）
     autostart/  # 开机自启
     settings/   # 设置模型与持久化
