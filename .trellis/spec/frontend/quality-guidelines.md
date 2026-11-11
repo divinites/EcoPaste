@@ -7,11 +7,17 @@ Use these checks for frontend work:
 ```bash
 pnpm lint
 pnpm tsc
+pnpm test
 ```
 
-`pnpm lint` runs Biome. `pnpm tsc` checks TypeScript without emitting. There is
-no frontend test runner configured in this repository, so UI changes also need
-a manual app run through the affected path.
+`pnpm lint` runs Biome. `pnpm tsc` checks TypeScript without emitting.
+`pnpm test` runs Vitest (`vitest.config.ts`, node environment, `src/**/*.test.ts`).
+
+Vitest covers pure TS logic only: put testable logic in plain modules next to
+the hook/component (for example `hooks/clipboardItemsRange.ts` beside
+`useClipboardItems.ts`) and mock Tauri-bound modules such as `@/utils/is` with
+`vi.mock` before a dynamic `import()`. UI changes still need a manual app run
+through the affected path.
 
 For full cross-layer changes, also run Rust checks:
 

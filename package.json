@@ -32,6 +32,7 @@
     "release-beta": "release-it --verbose --preRelease=beta --preReleaseBase=1",
     "release-rc": "release-it --verbose --preRelease=rc --preReleaseBase=1",
     "lint": "biome check",
+    "test": "vitest run",
     "format": "biome check --write",
     "prepare": "simple-git-hooks",
     "preinstall": "npx only-allow pnpm"
@@ -80,6 +81,7 @@
     "tsx": "^4.23.12",
     "typescript": "~5.8.3",
     "unocss": "^66.7.5",
-    "vite": "^7.3.6"
+    "vite": "^7.3.6",
+    "vitest": "^5.1.0"
   }
 }
