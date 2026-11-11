@@ -21,6 +21,8 @@ export interface PreviewSession {
 export interface WindowVisibilityPayload {
   label: string;
   visible: boolean;
+  /** 隐藏时是否跳过滑出动画（粘贴路径）。 */
+  instant?: boolean;
 }
 
 export interface UseClipboardPreviewControllerOptions {

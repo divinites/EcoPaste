@@ -63,6 +63,7 @@ export const TAURI_COMMAND = {
   RELEASE_WINDOW_KEEPALIVE: "release_window_keepalive",
   RESET_SETTINGS: "reset_settings",
   RESET_STORAGE_LOCATION: "reset_storage_location",
+  RESIZE_CLIPBOARD_DOCK: "resize_clipboard_dock",
   RESTART_AS_ADMIN: "restart_as_admin",
   RESUME_GLOBAL_SHORTCUTS: "resume_global_shortcuts",
   REVEAL_CLIPBOARD_ITEM: "reveal_clipboard_item",

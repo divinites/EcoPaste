@@ -601,6 +601,15 @@
           "description": "底部停靠面板占屏幕可用高度的百分比，卡片随面板高度等比缩放。",
           "title": "停靠面板高度"
         },
+        "dockMonitor": {
+          "description": "底部停靠面板呼出时出现在哪块显示器上；取不到时回落到光标所在显示器。",
+          "options": {
+            "activeWindow": "当前窗口所在",
+            "cursor": "光标所在",
+            "primary": "主显示器"
+          },
+          "title": "停靠显示器"
+        },
         "idleDestroySeconds": {
           "description": "偏好设置、预览和右键菜单等非剪贴板窗口隐藏超过此时间后释放 WebView，下次使用时自动重建。",
           "title": "非剪贴板窗口空闲释放"

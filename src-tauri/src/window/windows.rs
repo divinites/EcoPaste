@@ -132,3 +132,34 @@ pub fn show_taskbar_icon(app_handle: &AppHandle, visible: bool) -> Result<()> {
         .map_err(|e| anyhow::anyhow!(e))?;
     Ok(())
 }
+
+/// 前台窗口中心点（物理像素，与 tao Windows `monitor_from_point` 一致）；
+/// 无前台窗口或前台窗口属于本进程时返回 `None`。
+pub fn foreground_window_center() -> Option<(f64, f64)> {
+    use winapi::shared::windef::RECT;
+    use winapi::um::processthreadsapi::GetCurrentProcessId;
+    use winapi::um::winuser::{GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId};
+
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return None;
+        }
+
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == GetCurrentProcessId() {
+            return None;
+        }
+
+        let mut rect: RECT = std::mem::zeroed();
+        if GetWindowRect(hwnd, &mut rect) == 0 {
+            return None;
+        }
+
+        Some((
+            f64::from(rect.left + rect.right) / 2.0,
+            f64::from(rect.top + rect.bottom) / 2.0,
+        ))
+    }
+}

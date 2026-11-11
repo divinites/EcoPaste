@@ -576,6 +576,8 @@ pub struct Window {
     pub layout: ClipboardWindowLayout,
     /// `Dock` 布局下面板高度占工作区高度的百分比，范围见 [`DOCK_HEIGHT_PERCENT_RANGE`]。
     pub dock_height_percent: u8,
+    /// `Dock` 布局呼出时停靠到哪块显示器。
+    pub dock_monitor: DockMonitor,
     /// 仅 `Vertical` 布局生效；`Dock` 布局固定贴底，忽略此项。
     pub position: WindowPosition,
     /// 打开剪贴板窗口时把历史列表回到顶部。
@@ -597,6 +599,7 @@ impl Default for Window {
         Self {
             layout: ClipboardWindowLayout::Dock,
             dock_height_percent: 40,
+            dock_monitor: DockMonitor::Cursor,
             position: WindowPosition::FollowCursor,
             scroll_to_top_on_open: true,
             select_range_on_open: WindowOpenRangeSelection::Preserve,
@@ -634,6 +637,16 @@ pub enum ClipboardWindowLayout {
     Vertical,
     #[default]
     Dock,
+}
+
+/// 停靠面板的显示器选择策略；解析失败时一律回落到光标所在显示器。
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum DockMonitor {
+    #[default]
+    Cursor,
+    ActiveWindow,
+    Primary,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]

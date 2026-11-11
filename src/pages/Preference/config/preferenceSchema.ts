@@ -4,6 +4,7 @@ import {
   CLIPBOARD_WINDOW_LAYOUT_OPTIONS,
   DOCK_HEIGHT_PERCENT_MAX,
   DOCK_HEIGHT_PERCENT_MIN,
+  DOCK_MONITOR_OPTIONS,
 } from "@/constants/clipboardLayout";
 import { ITEM_ACTION_OPTIONS } from "@/constants/itemActions";
 import { LANGUAGE_OPTIONS } from "@/constants/languages";
@@ -482,6 +483,22 @@ export const preferenceTabs: PreferenceTab[] = [
             path: ["clipboard", "window", "dockHeightPercent"],
             value: (settings) => {
               return settings.clipboard.window.dockHeightPercent;
+            },
+          },
+          {
+            control: { options: DOCK_MONITOR_OPTIONS, type: "segmented" },
+            disabledWhen: (settings) => {
+              return (
+                settings.clipboard.window.layout !==
+                CLIPBOARD_WINDOW_LAYOUT.DOCK
+              );
+            },
+            id: "window.dockMonitor",
+            keywords: ["window", "dock", "monitor", "screen", "display"],
+            parentId: "window.layout",
+            path: ["clipboard", "window", "dockMonitor"],
+            value: (settings) => {
+              return settings.clipboard.window.dockMonitor;
             },
           },
           {

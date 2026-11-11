@@ -205,3 +205,65 @@ pub fn make_clipboard_panel_key(app_handle: &AppHandle) -> Result<()> {
         .map_err(|e| anyhow::anyhow!(e))?;
     Ok(())
 }
+
+/// 前台应用最上层普通窗口（layer 0）的中心点，Quartz 全局坐标（左上原点、逻辑点），
+/// 与 tao macOS `monitor_from_point` 的坐标系一致。取不到前台应用或窗口时返回 `None`。
+pub fn frontmost_window_center() -> Option<(f64, f64)> {
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::window::{
+        copy_window_info, kCGNullWindowID, kCGWindowBounds, kCGWindowLayer,
+        kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly, kCGWindowOwnerPID,
+    };
+    use objc2_app_kit::NSWorkspace;
+
+    let pid = NSWorkspace::sharedWorkspace()
+        .frontmostApplication()?
+        .processIdentifier();
+    if pid == std::process::id() as i32 {
+        return None;
+    }
+
+    let windows = copy_window_info(
+        kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
+        kCGNullWindowID,
+    )?;
+
+    let number = |dict: &CFDictionary<CFString, CFType>, key: &CFString| {
+        dict.find(key)
+            .and_then(|value| value.downcast::<CFNumber>())
+            .and_then(|value| value.to_f64())
+    };
+    let (owner_key, layer_key, bounds_key) = unsafe {
+        (
+            CFString::wrap_under_get_rule(kCGWindowOwnerPID),
+            CFString::wrap_under_get_rule(kCGWindowLayer),
+            CFString::wrap_under_get_rule(kCGWindowBounds),
+        )
+    };
+
+    for raw in windows.iter() {
+        let dict: CFDictionary<CFString, CFType> =
+            unsafe { CFDictionary::wrap_under_get_rule(*raw as CFDictionaryRef) };
+        if number(&dict, &owner_key) != Some(f64::from(pid)) {
+            continue;
+        }
+        if number(&dict, &layer_key) != Some(0.0) {
+            continue;
+        }
+
+        let bounds = dict.find(&bounds_key)?.downcast::<CFDictionary>()?;
+        let bounds: CFDictionary<CFString, CFType> =
+            unsafe { CFDictionary::wrap_under_get_rule(bounds.as_concrete_TypeRef()) };
+        let x = number(&bounds, &CFString::from_static_string("X"))?;
+        let y = number(&bounds, &CFString::from_static_string("Y"))?;
+        let width = number(&bounds, &CFString::from_static_string("Width"))?;
+        let height = number(&bounds, &CFString::from_static_string("Height"))?;
+
+        return Some((x + width / 2.0, y + height / 2.0));
+    }
+
+    None
+}

@@ -132,3 +132,14 @@ pub async fn close_clipboard_preview(app: AppHandle) -> Result<()> {
 pub async fn get_clipboard_preview_state() -> Result<Option<ClipboardPreviewState>> {
     window::preview::get_clipboard_preview_state()
 }
+
+/// 拖拽停靠面板上边缘调整高度。`height` 为目标逻辑高度；`commit` 为 true 时写入设置。
+/// 返回钳制后的整数百分比。
+#[tauri::command]
+pub async fn resize_clipboard_dock(app: AppHandle, height: f64, commit: bool) -> Result<u8> {
+    if !height.is_finite() || height <= 0.0 {
+        return Err(anyhow::anyhow!("invalid dock height: {height}").into());
+    }
+
+    window::resize_dock(&app, height, commit)
+}

@@ -43,6 +43,15 @@ pub async fn update_settings(app: AppHandle, patch: serde_json::Value) -> Result
                     .is_some_and(|a| a.contains_key("language"))
         })
         .unwrap_or(false);
+    let touches_clipboard_layout = patch_obj
+        .and_then(|m| m.get("clipboard"))
+        .and_then(|v| v.get("window"))
+        .and_then(|v| v.as_object())
+        .is_some_and(|w| {
+            ["layout", "dockHeightPercent", "dockMonitor", "position"]
+                .iter()
+                .any(|key| w.contains_key(*key))
+        });
     let touches_run_as_admin = patch_obj
         .map(|m| {
             m.get("general")
@@ -67,6 +76,12 @@ pub async fn update_settings(app: AppHandle, patch: serde_json::Value) -> Result
 
     if touches_run_as_admin {
         admin::sync_scheduled_task(next.general.run_as_admin);
+    }
+
+    if touches_clipboard_layout {
+        if let Err(err) = window::relayout_clipboard_window_if_visible(&app) {
+            log::warn!("relayout clipboard window after settings update failed: {err}");
+        }
     }
 
     emit_settings_updated(&app, &next);
@@ -104,6 +119,10 @@ fn apply_reset_side_effects(app: &AppHandle, settings: &Settings) {
     }
 
     admin::sync_scheduled_task(settings.general.run_as_admin);
+
+    if let Err(err) = window::relayout_clipboard_window_if_visible(app) {
+        log::warn!("reset clipboard window layout failed: {err}");
+    }
 }
 
 /// 广播最新设置快照给所有前端窗口。

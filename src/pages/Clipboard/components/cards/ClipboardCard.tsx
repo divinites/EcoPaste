@@ -9,6 +9,7 @@ import type { ClipboardAction, ClipboardItem } from "@/types/clipboard";
 import type { ItemAction } from "@/types/settings";
 import { cn } from "@/utils/cn";
 import { isMac } from "@/utils/is";
+import { formatShortcutDisplay } from "@/utils/shortcut";
 import ClipboardQuickActions from "./ClipboardQuickActions";
 import { formatCardMeta } from "./cardMeta";
 import { resolveCardBandClass } from "./cardTheme";
@@ -234,14 +235,20 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
 
           <span className="min-w-0 flex-1 truncate text-center">{meta}</span>
 
-          <ClipboardQuickActions
-            item={item}
-            labels={quickActionLabels}
-            onQuickAction={onQuickAction}
-            placeholder={null}
-            quickActions={quickActions}
-            visible={hovered}
-          />
+          {hintKey && !hovered ? (
+            <kbd className="shrink-0 rounded-1 bg-ant-fill-secondary px-1 font-mono text-ant-secondary text-xs">
+              {formatShortcutDisplay(`CmdOrCtrl+${hintKey}`, isMac ? "" : "+")}
+            </kbd>
+          ) : (
+            <ClipboardQuickActions
+              item={item}
+              labels={quickActionLabels}
+              onQuickAction={onQuickAction}
+              placeholder={null}
+              quickActions={quickActions}
+              visible={hovered}
+            />
+          )}
         </div>
       </div>
     );

@@ -76,6 +76,7 @@ const SETTING_ICON_MAP: Record<string, string> = {
   "updates.frequency": "i-lucide:calendar-sync",
   "updates.nightly": "i-lucide:moon",
   "window.dockHeightPercent": "i-lucide:ruler",
+  "window.dockMonitor": "i-lucide:monitor",
   "window.idleDestroySeconds": "i-lucide:timer-reset",
   "window.layout": "i-lucide:panel-bottom",
   "window.lightweightMode": "i-lucide:leaf",

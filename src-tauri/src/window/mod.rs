@@ -12,8 +12,9 @@ pub mod windows;
 pub use macos::handle_reopen;
 pub use state::WindowStateStore;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
@@ -22,6 +23,8 @@ use tauri::{
 
 use crate::core::Result;
 use crate::settings::{ClipboardWindowLayout, SettingsStore, WindowPosition};
+
+use position::{DockHeight, DockTarget};
 
 pub const CLIPBOARD_WINDOW_LABEL: &str = "clipboard";
 pub const PREFERENCE_WINDOW_LABEL: &str = "preference";
@@ -95,15 +98,44 @@ const WINDOW_VISIBILITY_EVENT: &str = "window://visibility";
 struct WindowVisibilityPayload<'a> {
     label: &'a str,
     visible: bool,
+    /// 隐藏时不播放滑出动画（粘贴路径），前端据此跳过过渡。
+    instant: bool,
 }
 
 pub(super) fn emit_visibility(app_handle: &AppHandle, label: &str, visible: bool) {
+    emit_visibility_with(app_handle, label, visible, false);
+}
+
+fn emit_visibility_with(app_handle: &AppHandle, label: &str, visible: bool, instant: bool) {
     if let Err(err) = app_handle.emit(
         WINDOW_VISIBILITY_EVENT,
-        WindowVisibilityPayload { label, visible },
+        WindowVisibilityPayload {
+            label,
+            visible,
+            instant,
+        },
     ) {
         log::error!("emit window visibility failed: {err:?}");
     }
+}
+
+/// 停靠面板滑出动画时长；与前端 `useDockPanelTransition` 的滑出过渡时长保持一致。
+const DOCK_HIDE_ANIMATION: Duration = Duration::from_millis(120);
+
+/// 延迟隐藏的代号：每次显示 / 立即隐藏都会递增，使尚未到期的延迟隐藏失效。
+static HIDE_GENERATION: AtomicU64 = AtomicU64::new(0);
+/// 停靠面板正处于「已通知前端滑出、尚未真正隐藏」的窗口期。
+static PENDING_HIDE: AtomicBool = AtomicBool::new(false);
+
+/// 取消尚未到期的延迟隐藏。
+fn cancel_pending_hide() {
+    HIDE_GENERATION.fetch_add(1, Ordering::SeqCst);
+    PENDING_HIDE.store(false, Ordering::SeqCst);
+}
+
+/// 延迟隐藏到期时是否仍应执行（期间没有新的显示或立即隐藏）。
+fn pending_hide_still_valid(generation: u64) -> bool {
+    HIDE_GENERATION.load(Ordering::SeqCst) == generation
 }
 
 pub(super) fn get_window(app_handle: &AppHandle, label: &str) -> Result<WebviewWindow> {
@@ -122,6 +154,7 @@ pub fn show_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     }
 
     if label == CLIPBOARD_WINDOW_LABEL {
+        cancel_pending_hide();
         if let Err(err) = apply_clipboard_window_layout(app_handle) {
             log::warn!("apply clipboard window layout failed: {err}");
         }
@@ -160,26 +193,75 @@ fn delays_clipboard_visibility_event(label: &str) -> bool {
     cfg!(target_os = "macos") && label == CLIPBOARD_WINDOW_LABEL
 }
 
+/// 隐藏窗口。停靠布局的剪贴板窗口先通知前端滑出，动画结束后再真正隐藏；
+/// 需要立刻让出焦点的路径（粘贴）请用 [`hide_window_immediate`]。
 pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
+    if label != CLIPBOARD_WINDOW_LABEL || !is_clipboard_window_docked(app_handle) {
+        return hide_window_now(app_handle, label, false);
+    }
+
+    // 滑出期间重复的隐藏请求（resign key 与 Esc 先后到达）直接忽略。
+    if PENDING_HIDE.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    preview::suppress_for_clipboard_hide(app_handle);
+    emit_visibility(app_handle, label, false);
+
+    let generation = HIDE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    let app_handle = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(DOCK_HIDE_ANIMATION).await;
+        if !pending_hide_still_valid(generation) {
+            return;
+        }
+
+        PENDING_HIDE.store(false, Ordering::SeqCst);
+        match hide_platform_window(&app_handle, CLIPBOARD_WINDOW_LABEL) {
+            Ok(()) => finish_hide(&app_handle, CLIPBOARD_WINDOW_LABEL),
+            Err(err) => log::warn!("delayed hide of clipboard window failed: {err}"),
+        }
+    });
+
+    Ok(())
+}
+
+/// 立即隐藏，不播放滑出动画；剪贴板窗口会取消尚未到期的延迟隐藏。
+pub fn hide_window_immediate(app_handle: &AppHandle, label: &str) -> Result<()> {
+    hide_window_now(app_handle, label, true)
+}
+
+fn hide_window_now(app_handle: &AppHandle, label: &str, instant: bool) -> Result<()> {
+    if label == CLIPBOARD_WINDOW_LABEL {
+        cancel_pending_hide();
+        preview::suppress_for_clipboard_hide(app_handle);
+    }
+
+    let result = hide_platform_window(app_handle, label);
+    if result.is_ok() {
+        emit_visibility_with(app_handle, label, false, instant);
+        finish_hide(app_handle, label);
+    }
+    result
+}
+
+/// 平台隐藏完成后的收尾：生命周期计时与 Dock 图标同步。
+fn finish_hide(app_handle: &AppHandle, label: &str) {
+    lifecycle::on_hidden(app_handle, label, "hide");
+    sync_dock_icon_after_hide(app_handle, label);
+}
+
+/// 保存几何后执行平台隐藏。
+fn hide_platform_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     // 隐藏前保存任意窗口的实时几何：移动与缩放都在这里落盘，下次显示/启动可恢复。
     if let Err(err) = state::save_window_state(app_handle, label) {
         log::warn!("save window state on hide failed for {label}: {err}");
     }
 
-    if label == CLIPBOARD_WINDOW_LABEL {
-        preview::suppress_for_clipboard_hide(app_handle);
-    }
-
     #[cfg(target_os = "macos")]
-    let result = macos::hide_window(app_handle, label);
+    return macos::hide_window(app_handle, label);
     #[cfg(target_os = "windows")]
-    let result = windows::hide_window(app_handle, label);
-    if result.is_ok() {
-        emit_visibility(app_handle, label, false);
-        lifecycle::on_hidden(app_handle, label, "hide");
-        sync_dock_icon_after_hide(app_handle, label);
-    }
-    result
+    return windows::hide_window(app_handle, label);
 }
 
 /// 非剪贴板窗口（偏好设置、引导、更新）显示时 macOS 会把进程提升为前台应用并出现 Dock 图标；
@@ -216,7 +298,9 @@ pub fn toggle_window(app_handle: &AppHandle, label: &str) -> Result<()> {
         .get_webview_window(label)
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false);
-    if visible {
+    // 滑出动画期间窗口仍可见，但用户视角已在隐藏，再按快捷键应重新呼出。
+    let hiding = label == CLIPBOARD_WINDOW_LABEL && PENDING_HIDE.load(Ordering::SeqCst);
+    if visible && !hiding {
         hide_window(app_handle, label)
     } else {
         show_window(app_handle, label)
@@ -259,9 +343,23 @@ fn apply_clipboard_window_layout(app_handle: &AppHandle) -> Result<()> {
         window
             .set_min_size::<LogicalSize<f64>>(None)
             .map_err(|e| anyhow::anyhow!(e))?;
-        return position::apply_dock(&window, window_settings.dock_height_percent);
+        position::apply_dock(
+            &window,
+            DockTarget::Strategy(window_settings.dock_monitor),
+            DockHeight::Percent(window_settings.dock_height_percent),
+        )?;
+        return Ok(());
     }
 
+    apply_vertical_layout(app_handle, &window, window_settings.position)
+}
+
+/// 竖向布局：恢复最小尺寸与存档几何，非 Remember 策略再覆盖位置。
+fn apply_vertical_layout(
+    app_handle: &AppHandle,
+    window: &WebviewWindow,
+    position: WindowPosition,
+) -> Result<()> {
     window
         .set_min_size(Some(VERTICAL_MIN_SIZE))
         .map_err(|e| anyhow::anyhow!(e))?;
@@ -275,11 +373,67 @@ fn apply_clipboard_window_layout(app_handle: &AppHandle) -> Result<()> {
             .map_err(|e| anyhow::anyhow!(e))?;
     }
 
-    if matches!(window_settings.position, WindowPosition::Remember) {
+    if matches!(position, WindowPosition::Remember) {
         return Ok(());
     }
 
-    position::position_window(&window, window_settings.position)
+    position::position_window(window, position)
+}
+
+/// 剪贴板窗口可见时按当前设置立即重排（改布局 / 高度后无需等下次呼出）；不可见直接返回。
+/// 停靠布局留在窗口当前所在显示器，避免在偏好设置里改值时面板跳屏。
+pub fn relayout_clipboard_window_if_visible(app_handle: &AppHandle) -> Result<()> {
+    let Some(window) = app_handle.get_webview_window(CLIPBOARD_WINDOW_LABEL) else {
+        return Ok(());
+    };
+    if !window.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    let Some(store) = app_handle.try_state::<SettingsStore>() else {
+        return Ok(());
+    };
+    let window_settings = store.snapshot().clipboard.window;
+
+    if window_settings.layout == ClipboardWindowLayout::Dock {
+        window
+            .set_min_size::<LogicalSize<f64>>(None)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        position::apply_dock(
+            &window,
+            DockTarget::Current,
+            DockHeight::Percent(window_settings.dock_height_percent),
+        )?;
+        return Ok(());
+    }
+
+    apply_vertical_layout(app_handle, &window, window_settings.position)
+}
+
+/// 拖拽停靠面板上边缘调整高度：按逻辑像素实时应用；`commit` 时换算为百分比写入设置并广播，
+/// 再按百分比应用一次，使松手后的高度与持久化值一致。返回生效的整数百分比。
+pub fn resize_dock(app_handle: &AppHandle, height: f64, commit: bool) -> Result<u8> {
+    let store = app_handle.state::<SettingsStore>();
+    let current = store.snapshot().clipboard.window;
+    if current.layout != ClipboardWindowLayout::Dock {
+        return Err(anyhow::anyhow!("clipboard window is not docked").into());
+    }
+
+    let window = get_window(app_handle, CLIPBOARD_WINDOW_LABEL)?;
+    let percent =
+        position::apply_dock(&window, DockTarget::Current, DockHeight::LogicalPx(height))?
+            .unwrap_or(current.dock_height_percent);
+
+    if !commit || percent == current.dock_height_percent {
+        return Ok(percent);
+    }
+
+    let next = store.update(serde_json::json!({
+        "clipboard": { "window": { "dockHeightPercent": percent } }
+    }))?;
+    crate::commands::emit_settings_updated(app_handle, &next);
+    position::apply_dock(&window, DockTarget::Current, DockHeight::Percent(percent))?;
+
+    Ok(percent)
 }
 
 /// 停靠布局下剪贴板窗口的整宽几何不写入存档，避免污染竖向布局的记忆尺寸。
@@ -498,4 +652,19 @@ pub fn take_pending_preference_highlight() -> Option<String> {
             poisoned.into_inner()
         });
     guard.take()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pending_hide_is_invalidated_by_show_or_immediate_hide() {
+        let generation = HIDE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+        assert!(pending_hide_still_valid(generation));
+
+        cancel_pending_hide();
+        assert!(!pending_hide_still_valid(generation));
+        assert!(!PENDING_HIDE.load(Ordering::SeqCst));
+    }
 }

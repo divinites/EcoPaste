@@ -54,6 +54,8 @@ export type RetentionUnit = "hours" | "days" | "weeks" | "months" | "forever";
 
 export type ClipboardWindowLayout = "vertical" | "dock";
 
+export type DockMonitor = "cursor" | "activeWindow" | "primary";
+
 export type WindowPosition = "remember" | "followCursor" | "center";
 
 export type WindowOpenRangeSelection = "preserve" | ClipboardRange;
@@ -153,6 +155,7 @@ export interface Search {
 export interface Window {
   layout: ClipboardWindowLayout;
   dockHeightPercent: number;
+  dockMonitor: DockMonitor;
   position: WindowPosition;
   scrollToTopOnOpen: boolean;
   selectRangeOnOpen: WindowOpenRangeSelection;

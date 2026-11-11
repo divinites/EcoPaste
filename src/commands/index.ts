@@ -1710,3 +1710,15 @@ export const setClipboardPasteQueue = (ids: string[]) => {
     { ids },
   );
 };
+
+/**
+ * 拖拽调整停靠面板高度：`height` 为目标逻辑高度，`commit` 为 true 时写入设置。
+ * 返回 Rust 钳制后的整数百分比。
+ */
+export const resizeClipboardDock = (height: number, commit: boolean) => {
+  return call<number>(
+    TAURI_COMMAND.RESIZE_CLIPBOARD_DOCK,
+    "commands:labels.resizeDock",
+    { commit, height },
+  );
+};

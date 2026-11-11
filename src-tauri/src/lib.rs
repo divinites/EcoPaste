@@ -153,6 +153,7 @@ pub fn run() {
             commands::import_legacy_data,
             commands::show_taskbar_icon,
             commands::position_window,
+            commands::resize_clipboard_dock,
             commands::set_clipboard_window_pinned,
             commands::set_clipboard_window_auto_hide_suspended,
             commands::set_clipboard_window_editing,

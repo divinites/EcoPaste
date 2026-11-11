@@ -47,7 +47,7 @@ pub async fn paste_into_frontmost(app: &AppHandle) -> Result<()> {
         if let Err(err) = window::macos::resign_clipboard_panel_key(app) {
             log::warn!("resign clipboard panel key before paste failed: {err:?}");
         }
-    } else if let Err(err) = window::hide_window(app, CLIPBOARD_WINDOW_LABEL) {
+    } else if let Err(err) = window::hide_window_immediate(app, CLIPBOARD_WINDOW_LABEL) {
         log::warn!("hide clipboard window before paste failed: {err:?}");
     }
 
