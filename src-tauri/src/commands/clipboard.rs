@@ -423,7 +423,6 @@ pub async fn paste_clipboard_item(
     );
 
     crate::clipboard::write_to_clipboard(&store, guard.inner().as_ref(), &item, write_plain)?;
-    mark_item_reused_if_enabled(&app, &pool, &id, item.kind).await?;
 
     if window::is_clipboard_window_pinned() {
         // 固定时窗口保持可见：macOS 上 panel 仍是 key window 会吞掉 ⌘V，需先 resign key
@@ -452,6 +451,11 @@ pub async fn paste_clipboard_item(
                 log::warn!("restore clipboard panel key after paste failed: {err:?}");
             }
         }
+    }
+
+    // 复用计数放在按键注入之后：DB 写入不拖慢粘贴，失败也不影响已完成的粘贴。
+    if let Err(err) = mark_item_reused_if_enabled(&app, &pool, &id, item.kind).await {
+        log::warn!("mark clipboard item reused after paste failed: {err}");
     }
 
     Ok(())
