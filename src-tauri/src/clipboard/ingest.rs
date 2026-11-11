@@ -78,18 +78,21 @@ fn files_to_content(files: &[String]) -> String {
 ///
 /// 一律以 trim 后的纯文本作为「是否有可展示内容」的判据：纯文本为空就直接 `None`，
 /// 不管 HTML/RTF 源是否存在（只有样式/空白节点的源对用户没意义，列表也渲染不出来）。
+/// 入库的 `content` / `search_text` 保留原始首尾空白（代码缩进、结尾换行），
+/// 只有摘要与子类型识别使用 trim 后的文本，避免写回时内容被悄悄改写。
 fn draft_from_text(text: &TextPayload, capture: &Capture, plain_only: bool) -> Option<Draft> {
     if !capture.text && !capture.html && !capture.rtf {
         return None;
     }
 
-    let plain = text.text.trim();
-    if plain.is_empty() {
+    let trimmed = text.text.trim();
+    if trimmed.is_empty() {
         return None;
     }
 
+    let plain = text.text.as_str();
     let plain_search = Some(plain.to_owned());
-    let summary = make_summary(plain);
+    let summary = make_summary(trimmed);
 
     let html = non_empty(&text.html);
     let rtf = non_empty(&text.rtf);
@@ -152,7 +155,7 @@ fn draft_from_text(text: &TextPayload, capture: &Capture, plain_only: bool) -> O
 fn draft_plain_text(plain: &str, plain_search: Option<String>, summary: Option<String>) -> Draft {
     Draft {
         kind: ClipboardKind::Text,
-        sub_kind: detect_text_sub_kind(plain),
+        sub_kind: detect_text_sub_kind(plain.trim()),
         content: plain.to_owned(),
         search_text: plain_search,
         summary,
@@ -869,5 +872,27 @@ mod tests {
         fn drop(&mut self) {
             std::fs::remove_dir_all(&self.0).ok();
         }
+    }
+
+    #[test]
+    fn plain_text_keeps_surrounding_whitespace() {
+        let (_d, s) = store();
+        let item = build_item(&s, &text_payload("    indented();\n", None, None))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(item.content, "    indented();\n");
+        assert_eq!(item.search_text.as_deref(), Some("    indented();\n"));
+        assert_eq!(item.summary.as_deref(), Some("indented();"));
+    }
+
+    #[test]
+    fn padded_url_still_detects_sub_kind() {
+        let (_d, s) = store();
+        let item = build_item(&s, &text_payload(" https://example.com\n", None, None))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(item.sub_kind, Some(ClipboardSubKind::Url));
     }
 }
