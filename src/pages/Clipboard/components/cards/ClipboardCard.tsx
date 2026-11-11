@@ -28,6 +28,10 @@ interface ClipboardCardProps {
   variant?: ClipboardCardVariant;
   isSelected?: boolean;
   /**
+   * 多选模式下是否已勾选。
+   */
+  isChecked?: boolean;
+  /**
    * 快捷键提示字符（"1"–"9" / "0"），存在时在 app 图标上叠加 KeyHint；
    * 按下修饰键（macOS ⌘ / Windows Ctrl）+ 该数字键触发快速粘贴。
    */
@@ -69,6 +73,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     item,
     variant = "compact",
     isSelected,
+    isChecked = false,
     hintKey,
     onQuickPaste,
     isLinkActive,
@@ -165,6 +170,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   );
 
   const rootProps = {
+    "aria-checked": isChecked,
     "aria-selected": isSelected,
     draggable: true,
     onAuxClick,
@@ -190,7 +196,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
         className={cn(
           "relative flex size-full flex-col overflow-hidden rounded-4 bg-ant-container shadow-md ring-1 ring-ant-border-secondary transition-shadow duration-150 ease-out motion-reduce:transition-none",
           {
-            "shadow-lg ring-2 ring-ant-primary": isSelected,
+            "shadow-lg ring-2 ring-ant-primary": isSelected || isChecked,
           },
         )}
       >
@@ -201,7 +207,10 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
           )}
         >
           <div className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate font-medium text-sm">{typeLabel}</span>
+            <span className="flex items-center gap-1 truncate font-medium text-sm">
+              {isChecked ? renderCheckedIcon("text-ant-light-solid") : null}
+              {typeLabel}
+            </span>
             <span className="truncate text-xs opacity-85">
               {item.displayCreatedAt ?? item.createdAt}
             </span>
@@ -244,14 +253,17 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
       className={cn(
         "relative flex flex-col gap-1 overflow-hidden rounded-2 border border-ant-border-secondary p-2 transition-colors duration-150 ease-out motion-reduce:transition-none",
         {
-          "border-ant-primary bg-ant-blue-1": isSelected,
-          "border-ant-primary bg-ant-container": item.isPinned && !isSelected,
+          "border-ant-primary bg-ant-blue-1": isSelected || isChecked,
+          "border-ant-primary bg-ant-container":
+            item.isPinned && !isSelected && !isChecked,
         },
       )}
     >
       <div className="flex items-center justify-between text-ant-secondary text-xs">
         <div className="flex min-w-0 items-center gap-1 overflow-hidden">
-          {hintedSourceAppIcon}
+          {isChecked
+            ? renderCheckedIcon("text-ant-primary")
+            : hintedSourceAppIcon}
 
           <span className="truncate">{typeLabel}</span>
         </div>
@@ -272,6 +284,18 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     </div>
   );
 };
+
+/**
+ * 多选勾选标记。
+ */
+function renderCheckedIcon(colorClass: string) {
+  return (
+    <i
+      aria-hidden="true"
+      className={cn("i-lucide:circle-check size-4 shrink-0", colorClass)}
+    />
+  );
+}
 
 /**
  * 渲染紧凑卡片右下角的状态水印；仅表达状态，不参与交互。

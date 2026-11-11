@@ -25,6 +25,7 @@ import { cn } from "@/utils/cn";
 import { formatShortcutDisplay } from "@/utils/shortcut";
 import Group from "./Group";
 import ListeningToggle from "./ListeningToggle";
+import PasteQueueIndicator from "./PasteQueueIndicator";
 import SearchInput from "./SearchInput";
 
 interface WindowVisibilityPayload {
@@ -227,6 +228,7 @@ const Header: FC<HeaderProps> = (props) => {
       <div className="flex items-center gap-1">
         {isDock ? null : searchInput}
 
+        <PasteQueueIndicator />
         <ListeningToggle />
 
         <Tooltip title={t(pinned ? "header.unpin" : "header.pin")}>

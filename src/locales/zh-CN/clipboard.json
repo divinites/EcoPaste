@@ -1,4 +1,9 @@
 {
+  "editContent": {
+    "placeholder": "输入新的内容...",
+    "richTextWarning": "这条记录包含富文本格式，保存后将变为纯文本。",
+    "title": "编辑内容"
+  },
   "empty": {
     "categories": {
       "files": "文件",
@@ -80,6 +85,10 @@
     "placeholder": "为这条记录添加备注...",
     "title": "编辑备注"
   },
+  "pasteQueue": {
+    "label": "队列 {{remaining}}/{{total}}",
+    "tooltip": "按 {{shortcut}} 粘贴下一条；关闭以清空队列"
+  },
   "quickActions": {
     "copy": "复制",
     "copyPlain": "复制为纯文本",
@@ -96,6 +105,17 @@
     "sendEmail": "发送邮件",
     "star": "收藏",
     "starActive": "取消收藏"
+  },
+  "selection": {
+    "clear": "取消选择",
+    "copyMerged": "合并复制",
+    "count": "已选 {{count}} 项",
+    "delete": "删除",
+    "favorite": "收藏",
+    "moveToGroup": "移动到分组",
+    "pasteMerged": "合并粘贴",
+    "pasteQueue": "加入粘贴队列",
+    "unfavorite": "取消收藏"
   },
   "shortcuts": {
     "closePreviewFilterWindow": "关闭预览 / 筛选 / 窗口",

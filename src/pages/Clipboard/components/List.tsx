@@ -15,16 +15,24 @@ import {
 } from "react-virtuoso";
 import { useSnapshot } from "valtio";
 import {
+  copyClipboardItemsMerged,
   deleteClipboardItem,
+  deleteClipboardItems,
+  getClipboardItem,
   hideWindow,
   listClipboardGroups,
   openClipboardItemLink,
   pasteClipboardItem,
+  pasteClipboardItemsMerged,
+  pasteClipboardItemTransformed,
   revealClipboardItem,
   saveClipboardImageToFile,
+  setClipboardItemsFavorite,
+  setClipboardPasteQueue,
   toggleClipboardItemFavorite,
   toggleClipboardItemPinned,
   updateClipboardItemGroup,
+  updateClipboardItemsGroup,
   writeToClipboard,
 } from "@/commands";
 import VirtuosoScroller, {
@@ -49,15 +57,26 @@ import type {
   ClipboardGroupRecord,
   ClipboardItem,
   ClipboardKind,
+  TextTransform,
 } from "@/types/clipboard";
 import type { ItemAction } from "@/types/settings";
+import { getMessageApi } from "@/utils/feedback";
 import { isMac } from "@/utils/is";
+import { formatShortcutDisplay } from "@/utils/shortcut";
+import {
+  type ClipboardSelection,
+  EMPTY_SELECTION,
+  selectionIds,
+  selectRange,
+  toggleSelection,
+} from "../hooks/clipboardSelection";
 import type { WindowVisibilityPayload } from "../hooks/previewController";
 import {
   isSpaceKey,
   useClipboardPreviewController,
 } from "../hooks/useClipboardPreviewController";
 import ClipboardCard from "./cards/ClipboardCard";
+import EditContentModal from "./EditContentModal";
 import ListPlaceholderItem from "./ListPlaceholderItem";
 import { getEmptyDescription } from "./listEmptyDescription";
 import {
@@ -75,6 +94,7 @@ import {
   shouldUseNativeCopy,
 } from "./listHelpers";
 import NoteModal from "./NoteModal";
+import SelectionBar, { type SelectionBarAction } from "./SelectionBar";
 
 /** 前 10 项的快捷键：index 0-8 对应 1-9，index 9 对应 0 */
 const KEY_HINTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
@@ -119,6 +139,9 @@ const List: FC<ListProps> = (props) => {
   const [isModifierPressed, setIsModifierPressed] = useState(false);
   const [customGroups, setCustomGroups] = useState<ClipboardGroupRecord[]>([]);
   const [noteTarget, setNoteTarget] = useState<ClipboardItem | null>(null);
+  const [editTarget, setEditTarget] = useState<ClipboardItem | null>(null);
+  const [selection, setSelection] =
+    useState<ClipboardSelection>(EMPTY_SELECTION);
   const [cardSize, setCardSize] = useState(0);
   const cardSizeObserverRef = useRef<ResizeObserver | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -200,6 +223,7 @@ const List: FC<ListProps> = (props) => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: snapshot 作触发器，不需在回调内读取
   useEffect(() => {
     setSelectedId(null);
+    setSelection(EMPTY_SELECTION);
     if (keywordRef.current !== keyword) keywordRef.current = keyword;
     deferredReloadRef.current = false;
     closePreview("filterChange");
@@ -322,7 +346,10 @@ const List: FC<ListProps> = (props) => {
     if (label !== WINDOW_LABEL.CLIPBOARD) return;
 
     clipboardWindowVisibleRef.current = visible;
-    if (!visible) return;
+    if (!visible) {
+      setSelection(EMPTY_SELECTION);
+      return;
+    }
 
     const {
       scrollToTopOnOpen,
@@ -432,6 +459,99 @@ const List: FC<ListProps> = (props) => {
     }
 
     patchItem(item.id, { groupId: nextGroupId });
+  };
+
+  /**
+   * 打开内容编辑框；若该条正在预览，先关闭预览。
+   */
+  const handleOpenEditContent = (item: ClipboardItem, reason: string) => {
+    if (previewSession?.itemId === item.id) closePreview(reason);
+
+    setEditTarget(item);
+  };
+
+  const handleCloseEditContent = useCallback(() => {
+    setEditTarget(null);
+  }, []);
+
+  /**
+   * 内容保存后按 id 拉取最新列表视图（摘要、子类型、字符数都由 Rust 重新计算）。
+   */
+  const handleContentSaved = async (id: string) => {
+    const next = await getClipboardItem(id);
+
+    if (!next) {
+      removeItem(id);
+      return;
+    }
+
+    patchItem(id, next);
+  };
+
+  /**
+   * 执行多选操作条上的批量动作；完成后清空选择并刷新当前范围。
+   */
+  async function runSelectionAction(action: SelectionBarAction) {
+    const ids = selectionIds(selection);
+
+    if (action === "clear" || ids.length === 0) {
+      setSelection(EMPTY_SELECTION);
+      return;
+    }
+
+    closePreview("selectionAction");
+
+    switch (action) {
+      case "pasteMerged":
+        setSelection(EMPTY_SELECTION);
+        await pasteClipboardItemsMerged(ids);
+        return;
+      case "copyMerged":
+        await copyClipboardItemsMerged(ids);
+        return;
+      case "pasteQueue": {
+        const state = await setClipboardPasteQueue(ids);
+
+        setSelection(EMPTY_SELECTION);
+        getMessageApi().success(
+          t("commands:messages.pasteQueueStarted", {
+            count: state.total,
+            shortcut: formatShortcutDisplay(state.shortcut),
+          }),
+        );
+        void hideWindow(WINDOW_LABEL.CLIPBOARD);
+        return;
+      }
+      case "favorite":
+      case "unfavorite":
+        await setClipboardItemsFavorite(ids, action === "favorite");
+        break;
+      case "delete": {
+        const deletable = selection.items.filter(canDeleteItem).map((item) => {
+          return item.id;
+        });
+        const deleted = await deleteClipboardItems(deletable);
+
+        if (!deleted) return;
+        break;
+      }
+    }
+
+    setSelection(EMPTY_SELECTION);
+    reloadCurrentRange();
+  }
+
+  const handleSelectionAction = (action: SelectionBarAction) => {
+    void runSelectionAction(action);
+  };
+
+  /**
+   * 把多选记录批量移动到分组。
+   */
+  const handleSelectionMoveToGroup = async (targetGroupId: string) => {
+    await updateClipboardItemsGroup(selectionIds(selection), targetGroupId);
+    setSelection(EMPTY_SELECTION);
+    reloadCurrentRange();
   };
 
   /**
@@ -604,6 +724,18 @@ const List: FC<ListProps> = (props) => {
       case "editNote":
         handleOpenNote(target, "editNote");
         return;
+      case "editContent":
+        handleOpenEditContent(target, "editContent");
+        return;
+      case "pasteTransformed":
+        if (!targetGroupId) return;
+
+        closePreview("pasteTransformed");
+        void pasteClipboardItemTransformed(
+          target.id,
+          targetGroupId as TextTransform,
+        );
+        return;
       case "delete":
         if (!canDeleteItem(target)) return;
 
@@ -623,6 +755,9 @@ const List: FC<ListProps> = (props) => {
 
     setIsModifierPressed(eventModifierPressed);
 
+    // 弹窗内的按键（备注 / 内容编辑的回车换行、Esc 关闭）交给弹窗自己处理。
+    if (noteTarget !== null || editTarget !== null) return;
+
     if (event.key === "Escape") {
       event.preventDefault();
       closeTopEscapeLayer();
@@ -631,6 +766,13 @@ const List: FC<ListProps> = (props) => {
     }
 
     if (total === 0) return;
+
+    if (event.key === "Enter" && selection.items.length > 0) {
+      event.preventDefault();
+      void runSelectionAction("pasteMerged");
+
+      return;
+    }
 
     if (event.key === "Enter") {
       event.preventDefault();
@@ -719,6 +861,17 @@ const List: FC<ListProps> = (props) => {
       if (!activeItem) return;
 
       handleTogglePinned(activeItem.id);
+
+      return;
+    }
+
+    if (eventModifierPressed && event.key.toLowerCase() === "e") {
+      const activeItem = getActiveItem();
+
+      if (!activeItem?.availableActions?.includes("editContent")) return;
+
+      event.preventDefault();
+      handleOpenEditContent(activeItem, "shortcutEditContent");
 
       return;
     }
@@ -892,10 +1045,29 @@ const List: FC<ListProps> = (props) => {
     >
       <VirtuosoScroller>{renderVirtuoso}</VirtuosoScroller>
 
+      {selection.items.length > 0 ? (
+        <SelectionBar
+          allFavorite={selection.items.every((selected) => {
+            return selected.isFavorite;
+          })}
+          canDelete={selection.items.some(canDeleteItem)}
+          count={selection.items.length}
+          groups={customGroups}
+          onAction={handleSelectionAction}
+          onMoveToGroup={handleSelectionMoveToGroup}
+        />
+      ) : null}
+
       <NoteModal
         item={noteTarget}
         onClose={handleCloseNote}
         onSaved={handleNoteSaved}
+      />
+
+      <EditContentModal
+        item={editTarget}
+        onClose={handleCloseEditContent}
+        onSaved={handleContentSaved}
       />
     </div>
   );
@@ -1057,6 +1229,35 @@ const List: FC<ListProps> = (props) => {
         return;
       }
 
+      // Cmd/Ctrl+点击切换勾选，Shift+点击按范围勾选；多选时不触发单击粘贴 / 复制。
+      if (isMac ? event.metaKey : event.ctrlKey) {
+        event.preventDefault();
+        setSelectedId(item.id);
+        setSelection((current) => {
+          return toggleSelection(current, item);
+        });
+        return;
+      }
+
+      if (event.shiftKey) {
+        event.preventDefault();
+        setSelectedId(item.id);
+        setSelection((current) => {
+          const anchorId = current.anchorId ?? selectedId;
+          const anchorIndex =
+            anchorId === null ? null : getItemIndexById(anchorId);
+          const base =
+            current.items.length === 0 && anchorId !== null
+              ? toggleSelection(current, findItemById(anchorId) ?? item)
+              : current;
+
+          return selectRange(base, item, anchorIndex, index, getItem);
+        });
+        return;
+      }
+
+      if (selection.items.length > 0) setSelection(EMPTY_SELECTION);
+
       setSelectedId(item.id);
 
       if (autoPaste === "singleClickPaste") {
@@ -1109,6 +1310,9 @@ const List: FC<ListProps> = (props) => {
         <ClipboardCard
           availableActions={availableActions}
           hintKey={hintKey}
+          isChecked={selection.items.some((selected) => {
+            return selected.id === item.id;
+          })}
           isLinkActive={isModifierPressed}
           isSelected={
             selectedId === null
@@ -1176,6 +1380,11 @@ const List: FC<ListProps> = (props) => {
   function closeTopEscapeLayer() {
     if (previewSession !== null) {
       closePreview("escape");
+      return;
+    }
+
+    if (selection.items.length > 0) {
+      setSelection(EMPTY_SELECTION);
       return;
     }
 

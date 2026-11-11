@@ -1,4 +1,9 @@
 {
+  "editContent": {
+    "placeholder": "Enter the new content...",
+    "richTextWarning": "This record contains rich text. It will be saved as plain text.",
+    "title": "Edit Content"
+  },
   "empty": {
     "categories": {
       "files": "file",
@@ -80,6 +85,10 @@
     "placeholder": "Add a note for this item...",
     "title": "Edit note"
   },
+  "pasteQueue": {
+    "label": "Queue {{remaining}}/{{total}}",
+    "tooltip": "Press {{shortcut}} to paste the next record. Close to clear the queue"
+  },
   "quickActions": {
     "copy": "Copy",
     "copyPlain": "Copy as Plain Text",
@@ -96,6 +105,17 @@
     "sendEmail": "Send Email",
     "star": "Favorite",
     "starActive": "Unfavorite"
+  },
+  "selection": {
+    "clear": "Clear selection",
+    "copyMerged": "Copy merged",
+    "count": "{{count}} selected",
+    "delete": "Delete",
+    "favorite": "Favorite",
+    "moveToGroup": "Move to group",
+    "pasteMerged": "Paste merged",
+    "pasteQueue": "Add to paste queue",
+    "unfavorite": "Unfavorite"
   },
   "shortcuts": {
     "closePreviewFilterWindow": "Close preview / filters / window",

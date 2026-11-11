@@ -33,7 +33,20 @@ export type ClipboardAction =
   | "togglePinned"
   | "moveToGroup"
   | "editNote"
+  | "editContent"
+  | "pasteTransformed"
   | "delete";
+
+/** 右键「粘贴为…」可选转换，与 Rust `TextTransform` 对应。 */
+export type TextTransform =
+  | "trim"
+  | "singleLine"
+  | "uppercase"
+  | "lowercase"
+  | "jsonPretty"
+  | "jsonMinify"
+  | "urlEncode"
+  | "urlDecode";
 
 export interface ClipboardItem {
   id: string;

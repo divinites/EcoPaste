@@ -17,10 +17,12 @@ import type {
   ClipboardApp,
   ClipboardGroupInput,
   ClipboardGroupRecord,
+  ClipboardItem,
   ClipboardItemPage,
   ClipboardItemQuery,
   ClipboardKind,
   ClipboardSubKind,
+  TextTransform,
   UpdateNoteResult,
 } from "@/types/clipboard";
 import type { Settings, SettingsPatch } from "@/types/settings";
@@ -1519,5 +1521,192 @@ export const setClipboardSkipNext = (skip: boolean) => {
     TAURI_COMMAND.SET_CLIPBOARD_SKIP_NEXT,
     "commands:labels.skipNextCopy",
     { skip },
+  );
+};
+
+/**
+ * 按 id 拉取单条列表视图记录（编辑内容后回填本地镜像）；不存在时为 `null`。
+ */
+export const getClipboardItem = (id: string) => {
+  return call<ClipboardItem | null>(
+    TAURI_COMMAND.GET_CLIPBOARD_ITEM,
+    "commands:labels.loadItem",
+    { id },
+  );
+};
+
+/**
+ * 读取记录的完整可编辑纯文本（不脱敏）。
+ */
+export const getClipboardItemText = (id: string) => {
+  return call<string>(
+    TAURI_COMMAND.GET_CLIPBOARD_ITEM_TEXT,
+    "commands:labels.loadItem",
+    { id },
+  );
+};
+
+/**
+ * 保存编辑后的文本内容；富文本记录保存后变为纯文本。成功后统一 toast。
+ */
+export const updateClipboardItemContent = async (
+  id: string,
+  content: string,
+) => {
+  await call<void>(
+    TAURI_COMMAND.UPDATE_CLIPBOARD_ITEM_CONTENT,
+    "commands:labels.saveContent",
+    { content, id },
+  );
+
+  getMessageApi().success(i18n.t("commands:messages.contentSaved"));
+};
+
+/**
+ * 把文本记录转换后粘贴到前台应用，历史记录本身不变。
+ */
+export const pasteClipboardItemTransformed = (
+  id: string,
+  transform: TextTransform,
+) => {
+  return call<void>(
+    TAURI_COMMAND.PASTE_CLIPBOARD_ITEM_TRANSFORMED,
+    "commands:labels.pasteTransformed",
+    { id, transform },
+  );
+};
+
+/**
+ * 批量删除；按设置弹出一次确认。返回是否实际执行了删除。
+ */
+export const deleteClipboardItems = async (ids: string[]) => {
+  if (ids.length === 0) return false;
+
+  const needConfirm = settingsState.clipboard?.content.deleteConfirm ?? true;
+
+  if (needConfirm) {
+    const ok = await new Promise<boolean>((resolve) => {
+      getModalApi().confirm({
+        cancelText: i18n.t("common:actions.cancel"),
+        centered: true,
+        content: i18n.t("commands:deleteItemsConfirm.content", {
+          count: ids.length,
+        }),
+        okButtonProps: { danger: true },
+        okText: i18n.t("common:actions.delete"),
+        onCancel: () => resolve(false),
+        onOk: () => resolve(true),
+        title: i18n.t("commands:deleteItemsConfirm.title"),
+      });
+    });
+
+    if (!ok) return false;
+  }
+
+  const removed = await call<number>(
+    TAURI_COMMAND.DELETE_CLIPBOARD_ITEMS,
+    "commands:labels.deleteItems",
+    { ids },
+  );
+
+  getMessageApi().success(
+    i18n.t("commands:messages.itemsDeleted", { count: removed }),
+  );
+
+  return true;
+};
+
+/**
+ * 批量收藏 / 取消收藏。
+ */
+export const setClipboardItemsFavorite = async (
+  ids: string[],
+  favorite: boolean,
+) => {
+  const changed = await call<number>(
+    TAURI_COMMAND.SET_CLIPBOARD_ITEMS_FAVORITE,
+    "commands:labels.favoriteItems",
+    { favorite, ids },
+  );
+
+  getMessageApi().success(
+    i18n.t(
+      favorite
+        ? "commands:messages.itemsFavorited"
+        : "commands:messages.itemsUnfavorited",
+      { count: changed },
+    ),
+  );
+};
+
+/**
+ * 批量移动到分组。
+ */
+export const updateClipboardItemsGroup = async (
+  ids: string[],
+  groupId: string,
+) => {
+  const changed = await call<number>(
+    TAURI_COMMAND.UPDATE_CLIPBOARD_ITEMS_GROUP,
+    "commands:labels.moveItems",
+    { groupId, ids },
+  );
+
+  getMessageApi().success(
+    i18n.t("commands:messages.itemsMoved", { count: changed }),
+  );
+};
+
+/**
+ * 把多条记录按顺序合并为纯文本写入剪贴板。
+ */
+export const copyClipboardItemsMerged = async (ids: string[]) => {
+  await call<void>(
+    TAURI_COMMAND.COPY_CLIPBOARD_ITEMS_MERGED,
+    "commands:labels.copyMerged",
+    { ids },
+  );
+
+  getMessageApi().success(i18n.t("commands:messages.copied"));
+};
+
+/**
+ * 把多条记录按顺序合并为纯文本并粘贴到前台应用。
+ */
+export const pasteClipboardItemsMerged = (ids: string[]) => {
+  return call<void>(
+    TAURI_COMMAND.PASTE_CLIPBOARD_ITEMS_MERGED,
+    "commands:labels.pasteMerged",
+    { ids },
+  );
+};
+
+/**
+ * 粘贴队列状态：剩余条数、本轮总数与「粘贴下一条」快捷键。
+ */
+export interface PasteQueueState {
+  remaining: number;
+  total: number;
+  shortcut: string;
+}
+
+/**
+ * 读取粘贴队列状态；后续变化走 `clipboard://paste-queue` 事件。
+ */
+export const getClipboardPasteQueue = () => {
+  return call<PasteQueueState>(
+    TAURI_COMMAND.GET_CLIPBOARD_PASTE_QUEUE,
+    "commands:labels.pasteQueue",
+  );
+};
+
+/**
+ * 用 `ids`（粘贴顺序）替换粘贴队列；空数组清空。
+ */
+export const setClipboardPasteQueue = (ids: string[]) => {
+  return call<PasteQueueState>(
+    TAURI_COMMAND.SET_CLIPBOARD_PASTE_QUEUE,
+    "commands:labels.pasteQueue",
+    { ids },
   );
 };
