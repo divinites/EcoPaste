@@ -103,9 +103,20 @@ renderers.
 - Rust fields:
   - `Window.layout: ClipboardWindowLayout` (`Vertical | Dock`, default `Dock`)
   - `Window.dock_height_percent: u8` (default `40`)
+  - `Window.dock_monitor: DockMonitor` (`Cursor | ActiveWindow | Primary`, default `Cursor`)
   - `settings::DOCK_HEIGHT_PERCENT_RANGE: RangeInclusive<u8> = 25..=60`
 - Rust geometry:
-  - `window::position::apply_dock(window, height_percent) -> Result<()>`
+  - `window::position::apply_dock(window, DockTarget, DockHeight) -> Result<Option<u8>>`
+    (`DockTarget::Strategy(DockMonitor) | Current`, `DockHeight::Percent | LogicalPx`;
+    returns the effective integer percent)
+  - `window::relayout_clipboard_window_if_visible(app)` (called by
+    `update_settings` when `clipboard.window.{layout,dockHeightPercent,dockMonitor,position}`
+    change, and after reset)
+  - `window::resize_dock(app, logical_height, commit) -> Result<u8>` behind the
+    `resize_clipboard_dock` command (top-edge drag handle)
+  - `window::hide_window` (docked clipboard: emit `visible:false`, real hide after
+    `DOCK_HIDE_ANIMATION` = 120 ms, cancelled by `show_window`) vs
+    `window::hide_window_immediate` (paste paths; emits `instant: true`)
   - `window::is_clipboard_window_docked(app) -> bool`
   - `window::preview::resolve_panel_rect(source, overlay, prefer_top)`
 - List payload:
@@ -119,8 +130,18 @@ renderers.
 
 #### 3. Contracts
 
+- Monitor lookup: `monitor_from_point` expects logical points on macOS
+  (`CGDisplayBounds`) but physical pixels on Windows (`MonitorFromPoint`).
+  `position::monitor_query_point` converts accordingly; never divide a Windows
+  cursor position by the scale factor before querying.
+- `DockMonitor` resolution falls back to the cursor monitor when the strategy
+  cannot resolve (no frontmost window, no primary monitor). `ActiveWindow` uses
+  `CGWindowListCopyWindowInfo` (macOS) / `GetForegroundWindow` (Windows) and
+  ignores windows owned by EcoPaste.
+- Paste paths must call `hide_window_immediate`; a delayed hide keeps the macOS
+  panel key for 120 ms and the injected ⌘V would be swallowed by the panel.
 - `Dock`: before every show, `apply_clipboard_window_layout` clears the minimum
-  size, then `apply_dock` places the window on the cursor monitor's
+  size, then `apply_dock` places the window on the resolved monitor's
   `work_area()` (never the full monitor): full work-area width (Windows: width
   minus 1 px to avoid full-screen detection), height =
   `max(work_area.height * percent / 100, 280 logical px)` clamped to the work

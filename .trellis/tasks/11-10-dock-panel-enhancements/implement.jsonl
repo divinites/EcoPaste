@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/settings-window-platform.md", "reason": "dockMonitor 设置项、dock 几何、延迟隐藏与窗口生命周期须遵守的设置模型与平台约定"}
+{"file": ".trellis/spec/backend/commands-and-events.md", "reason": "新增 resize_clipboard_dock 命令与 window://visibility 的 instant 字段走既有命令/事件契约"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "DockResizeHandle、卡片序号徽标、过渡类的组件与样式 token 约定"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "useDockPanelTransition 的事件订阅与清理约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "dockMonitor 从 settingsState 镜像读取，不建前端副本"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "设置字段、命令名、事件 payload 跨 Rust/TS/schema/locale 同步清单"}

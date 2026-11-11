@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "lint、双语文案完整性、UI 实操验证清单"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "settings 与 visibility payload 类型镜像、常量集中维护"}
+{"file": ".trellis/spec/backend/settings-window-platform.md", "reason": "核对设置默认值兼容、平台 cfg 隔离、窗口状态存档未被 dock 几何污染"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "逐项核对 Rust 模型、TS 类型、preferenceSchema、文案、命令常量"}
