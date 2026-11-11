@@ -6,6 +6,7 @@ use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 use crate::core::Result;
 use crate::db::models::{
     ClipboardGroupFilter, ClipboardItem, ClipboardItemQuery, ClipboardItemSort, ClipboardKind,
+    ClipboardSubKind,
 };
 
 const SELECT_ITEM: &str = "SELECT id, kind, sub_kind, group_id, source_app_id, content, \
@@ -260,6 +261,138 @@ pub async fn increment_item_use_count(pool: &SqlitePool, id: &str) -> Result<()>
     Ok(())
 }
 
+/// 编辑文本记录后要写回的字段；由调用方按新内容重新计算。
+pub struct TextContentUpdate<'a> {
+    pub content: &'a str,
+    pub content_hash: &'a str,
+    pub search_text: &'a str,
+    pub summary: Option<&'a str>,
+    pub sub_kind: Option<ClipboardSubKind>,
+    pub size: i64,
+    pub is_sensitive: bool,
+}
+
+/// 覆盖文本记录的内容相关字段；不刷新 `updated_at`（编辑不算复用）。
+/// 返回是否命中了一行（记录不存在或不是文本时为 `false`）。
+pub async fn update_item_text_content(
+    pool: &SqlitePool,
+    id: &str,
+    update: &TextContentUpdate<'_>,
+) -> Result<bool> {
+    let result = sqlx::query(
+        "UPDATE clipboard_items SET content = ?, content_hash = ?, search_text = ?, summary = ?, \
+         sub_kind = ?, size = ?, is_sensitive = ? WHERE id = ? AND kind = 'text'",
+    )
+    .bind(update.content)
+    .bind(update.content_hash)
+    .bind(update.search_text)
+    .bind(update.summary)
+    .bind(update.sub_kind)
+    .bind(update.size)
+    .bind(update.is_sensitive)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context("failed to update clipboard item content")?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// 是否存在同指纹的其它记录（编辑内容时防止与已有记录重复）。
+pub async fn content_hash_exists_elsewhere(
+    pool: &SqlitePool,
+    hash: &str,
+    except_id: &str,
+) -> Result<bool> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM clipboard_items WHERE content_hash = ? AND id <> ?)",
+    )
+    .bind(hash)
+    .bind(except_id)
+    .fetch_one(pool)
+    .await
+    .context("failed to check duplicated clipboard content")?;
+    Ok(exists)
+}
+
+/// 按给定 id 顺序取完整记录；不存在的 id 被跳过。
+pub async fn find_items_by_ids(pool: &SqlitePool, ids: &[String]) -> Result<Vec<ClipboardItem>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(SELECT_ITEM);
+    qb.push(" WHERE id IN (");
+    let mut separated = qb.separated(", ");
+    for id in ids {
+        separated.push_bind(id.clone());
+    }
+    qb.push(")");
+
+    let mut rows = qb
+        .build_query_as::<ClipboardItem>()
+        .fetch_all(pool)
+        .await
+        .context("failed to find clipboard items by ids")?;
+
+    let mut ordered = Vec::with_capacity(rows.len());
+    for id in ids {
+        if let Some(index) = rows.iter().position(|item| &item.id == id) {
+            ordered.push(rows.swap_remove(index));
+        }
+    }
+    Ok(ordered)
+}
+
+/// 批量设置收藏状态，返回受影响行数；不刷新 `updated_at`。
+pub async fn set_items_favorite(pool: &SqlitePool, ids: &[String], favorite: bool) -> Result<u64> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let mut qb: QueryBuilder<Sqlite> =
+        QueryBuilder::new("UPDATE clipboard_items SET is_favorite = ");
+    qb.push_bind(favorite).push(" WHERE id IN (");
+    let mut separated = qb.separated(", ");
+    for id in ids {
+        separated.push_bind(id.clone());
+    }
+    qb.push(")");
+
+    let result = qb
+        .build()
+        .execute(pool)
+        .await
+        .context("failed to update clipboard items favorite")?;
+    Ok(result.rows_affected())
+}
+
+/// 批量移动分组，返回受影响行数；不刷新 `updated_at`。
+pub async fn update_items_group(
+    pool: &SqlitePool,
+    ids: &[String],
+    group_id: Option<&str>,
+) -> Result<u64> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("UPDATE clipboard_items SET group_id = ");
+    qb.push_bind(group_id.map(str::to_owned))
+        .push(" WHERE id IN (");
+    let mut separated = qb.separated(", ");
+    for id in ids {
+        separated.push_bind(id.clone());
+    }
+    qb.push(")");
+
+    let result = qb
+        .build()
+        .execute(pool)
+        .await
+        .context("failed to update clipboard items group")?;
+    Ok(result.rows_affected())
+}
+
 /// 删除单条记录。若删除的是图片记录，返回其落盘文件名（`<hash>.png`），供调用方删图；
 /// 否则返回 `None`。记录不存在时也返回 `None`。
 ///
@@ -281,11 +414,11 @@ fn image_file_name(kind: ClipboardKind, content: String) -> Option<String> {
     (kind == ClipboardKind::Image).then_some(content)
 }
 
-/// 批量删除，返回实际删除行数；`ids` 为空时不发查询。
-#[allow(dead_code)]
-pub async fn delete_items(pool: &SqlitePool, ids: &[String]) -> Result<u64> {
+/// 批量删除，返回删除行数与其中图片记录的落盘文件名；`ids` 为空时不发查询。
+pub async fn delete_items(pool: &SqlitePool, ids: &[String]) -> Result<CleanupOutcome> {
+    let mut outcome = CleanupOutcome::default();
     if ids.is_empty() {
-        return Ok(0);
+        return Ok(outcome);
     }
 
     let mut qb: QueryBuilder<Sqlite> =
@@ -294,14 +427,15 @@ pub async fn delete_items(pool: &SqlitePool, ids: &[String]) -> Result<u64> {
     for id in ids {
         separated.push_bind(id);
     }
-    qb.push(")");
+    qb.push(") RETURNING kind, content");
 
-    let result = qb
-        .build()
-        .execute(pool)
+    let rows = qb
+        .build_query_as::<(ClipboardKind, String)>()
+        .fetch_all(pool)
         .await
         .context("failed to delete clipboard items")?;
-    Ok(result.rows_affected())
+    absorb_deleted(&mut outcome, rows);
+    Ok(outcome)
 }
 
 /// 历史清理的结果：删除行数 + 其中图片记录的落盘文件名（供调用方删图）。
@@ -1122,7 +1256,7 @@ mod tests {
             insert_item(&pool, &sample_item(id)).await.unwrap();
         }
 
-        assert_eq!(delete_items(&pool, &[]).await.unwrap(), 0);
+        assert_eq!(delete_items(&pool, &[]).await.unwrap().removed, 0);
 
         let removed = delete_items(
             &pool,
@@ -1130,7 +1264,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(removed, 2);
+        assert_eq!(removed.removed, 2);
         assert_eq!(
             ids(&query_items(&pool, &ClipboardItemQuery::default())
                 .await
@@ -1469,5 +1603,81 @@ mod tests {
             ids(&query_items(&pool, &search("memo")).await.unwrap()),
             ["meta"]
         );
+    }
+
+    #[tokio::test]
+    async fn batch_updates_and_ordered_lookup() {
+        let pool = memory_pool().await;
+        for id in ["a", "b", "c"] {
+            let mut item = sample_item(id);
+            item.content = format!("content-{id}");
+            item.content_hash = content_hash(ClipboardKind::Text, &item.content);
+            insert_item(&pool, &item).await.unwrap();
+        }
+        let ids = vec!["c".to_owned(), "missing".to_owned(), "a".to_owned()];
+
+        let found = find_items_by_ids(&pool, &ids).await.unwrap();
+        assert_eq!(ids_of(&found), ["c", "a"]);
+
+        assert_eq!(set_items_favorite(&pool, &ids, true).await.unwrap(), 2);
+        let favorites = ClipboardItemQuery {
+            favorite: Some(true),
+            ..Default::default()
+        };
+        assert_eq!(query_items(&pool, &favorites).await.unwrap().len(), 2);
+
+        let outcome = delete_items(&pool, &ids).await.unwrap();
+        assert_eq!(outcome.removed, 2);
+        assert_eq!(
+            ids_of(
+                &query_items(&pool, &ClipboardItemQuery::default())
+                    .await
+                    .unwrap()
+            ),
+            ["b"]
+        );
+    }
+
+    #[tokio::test]
+    async fn text_content_update_reindexes_search() {
+        let pool = memory_pool().await;
+        let mut item = sample_item("edit");
+        item.search_text = Some("before text".to_owned());
+        insert_item(&pool, &item).await.unwrap();
+
+        let hash = content_hash(ClipboardKind::Text, "after text");
+        let updated = update_item_text_content(
+            &pool,
+            "edit",
+            &TextContentUpdate {
+                content: "after text",
+                content_hash: &hash,
+                search_text: "after text",
+                summary: Some("after text"),
+                sub_kind: None,
+                size: 10,
+                is_sensitive: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(updated);
+
+        let search = |kw: &str| ClipboardItemQuery {
+            keyword: Some(kw.to_owned()),
+            ..Default::default()
+        };
+        assert!(query_items(&pool, &search("before"))
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(query_items(&pool, &search("after")).await.unwrap().len(), 1);
+        assert!(!content_hash_exists_elsewhere(&pool, &hash, "edit")
+            .await
+            .unwrap());
+    }
+
+    fn ids_of(items: &[ClipboardItem]) -> Vec<&str> {
+        items.iter().map(|item| item.id.as_str()).collect()
     }
 }

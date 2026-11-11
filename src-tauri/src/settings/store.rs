@@ -192,14 +192,20 @@ fn validate_settings(settings: &Settings) -> Result<()> {
     validate_dock_height_percent(settings.clipboard.window.dock_height_percent)?;
     crate::clipboard::validate_excluded_patterns(&settings.clipboard.filters.excluded_patterns)?;
 
-    let open_clipboard = normalize_shortcut_value(&settings.shortcuts.open_clipboard);
-    let open_preference = normalize_shortcut_value(&settings.shortcuts.open_preference);
+    let mut bindings: Vec<String> = [
+        &settings.shortcuts.open_clipboard,
+        &settings.shortcuts.open_preference,
+        &settings.shortcuts.paste_next,
+    ]
+    .into_iter()
+    .map(|binding| normalize_shortcut_value(binding))
+    .filter(|binding| !binding.is_empty())
+    .collect();
+    let count = bindings.len();
+    bindings.sort();
+    bindings.dedup();
 
-    if open_clipboard.is_empty() || open_preference.is_empty() {
-        return Ok(());
-    }
-
-    if open_clipboard == open_preference {
+    if bindings.len() != count {
         return Err(AppError::Other(anyhow::anyhow!(
             "global shortcuts must be unique"
         )));

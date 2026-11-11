@@ -40,5 +40,13 @@ pub fn label(key: Key) -> &'static str {
         Key::BackupSettingsMissing => "备份文件缺少设置文件",
         Key::BackupVersionUnsupported => "暂不支持该备份格式版本",
         Key::FilterPatternInvalid => "排除规则不是有效的正则表达式",
+        Key::TransformInvalidJson => "内容不是有效的 JSON",
+        Key::TransformInvalidUrlEncoding => "内容不是有效的 URL 编码",
+        Key::ItemNotEditable => "只有文本记录可以编辑",
+        Key::ItemContentEmpty => "内容不能为空",
+        Key::ItemContentTooLarge => "内容超过文本大小上限",
+        Key::ItemContentDuplicate => "已有相同内容的记录",
+        Key::NothingToMerge => "选中的记录没有可合并的文本",
+        Key::PasteQueueEmpty => "粘贴队列已空",
     }
 }

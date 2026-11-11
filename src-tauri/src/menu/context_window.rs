@@ -235,7 +235,7 @@ fn build_groups(
                     action: *a,
                     label: a.label(lang, is_favorite, is_pinned, has_note).into(),
                     accelerator: a.accelerator().map(String::from),
-                    groups: build_group_items(*a, clipboard_groups, current_group_id),
+                    groups: build_group_items(*a, clipboard_groups, current_group_id, lang),
                 })
                 .collect::<Vec<_>>()
         })
@@ -243,11 +243,24 @@ fn build_groups(
         .collect()
 }
 
+/// 二级菜单项：移动分组列出可见分组，「粘贴为…」列出可选转换（id 即转换 id）。
 fn build_group_items(
     action: ClipboardMenuAction,
     clipboard_groups: &[ClipboardMenuGroup],
     current_group_id: Option<&str>,
+    lang: Language,
 ) -> Vec<ContextSubmenuGroupInput> {
+    if action == ClipboardMenuAction::PasteTransformed {
+        return super::clipboard_item::transform_entries(lang)
+            .into_iter()
+            .map(|(id, label)| ContextSubmenuGroupInput {
+                checked: false,
+                id: id.to_owned(),
+                label: label.to_owned(),
+            })
+            .collect();
+    }
+
     if action != ClipboardMenuAction::MoveToGroup {
         return Vec::new();
     }

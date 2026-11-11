@@ -255,7 +255,10 @@ fn compute_available_actions(item: &ClipboardItem) -> Vec<ClipboardAction> {
     actions.push(ClipboardAction::Paste);
 
     match item.kind {
-        ClipboardKind::Text => actions.push(ClipboardAction::PasteAsPlainText),
+        ClipboardKind::Text => {
+            actions.push(ClipboardAction::PasteAsPlainText);
+            actions.push(ClipboardAction::PasteTransformed);
+        }
         ClipboardKind::Files => actions.push(ClipboardAction::PasteAsPath),
         ClipboardKind::Image => {}
     }
@@ -283,6 +286,9 @@ fn compute_available_actions(item: &ClipboardItem) -> Vec<ClipboardAction> {
     actions.push(ClipboardAction::ToggleFavorite);
     actions.push(ClipboardAction::TogglePinned);
     actions.push(ClipboardAction::EditNote);
+    if item.kind == ClipboardKind::Text {
+        actions.push(ClipboardAction::EditContent);
+    }
     actions.push(ClipboardAction::Delete);
 
     actions

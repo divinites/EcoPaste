@@ -161,6 +161,7 @@ pub fn init(app: &AppHandle) -> crate::core::Result<()> {
 
     let pause = WatcherPause::default();
     app.manage(pause.clone());
+    app.manage(super::PasteQueue::default());
 
     // 启动期只把已落库的应用读进缓存；运行中应用由偏好页打开/刷新时补齐。
     {

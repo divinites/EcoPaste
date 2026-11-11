@@ -38,5 +38,13 @@ pub fn label(key: Key) -> &'static str {
         Key::BackupSettingsMissing => "The backup file is missing the settings file",
         Key::BackupVersionUnsupported => "This backup format version is not supported",
         Key::FilterPatternInvalid => "Exclusion rule is not a valid regular expression",
+        Key::TransformInvalidJson => "The content is not valid JSON",
+        Key::TransformInvalidUrlEncoding => "The content is not valid URL encoding",
+        Key::ItemNotEditable => "Only text records can be edited",
+        Key::ItemContentEmpty => "Content cannot be empty",
+        Key::ItemContentTooLarge => "Content exceeds the text size limit",
+        Key::ItemContentDuplicate => "A record with the same content already exists",
+        Key::NothingToMerge => "The selected records have no text to merge",
+        Key::PasteQueueEmpty => "The paste queue is empty",
     }
 }

@@ -12,12 +12,12 @@ use tauri_plugin_dialog::DialogExt;
 use crate::clipboard::{
     add_app_from_path, build_clipboard_app_view, build_clipboard_preview_payload,
     build_item_with_settings, default_saved_image_file_name, delete_unreferenced_apps,
-    detect_frontmost, enrich_list_item, is_excluded_by_pattern, materialize_source,
-    merge_clipboard_apps, normalize_group_icon, normalize_group_name, normalize_group_svg,
-    persist_and_notify, refresh_running_apps, resolve_file_icon_path, sort_clipboard_apps,
-    validate_image_file_name, AppIconStore, AppsRegistry, ClipboardAppView,
-    ClipboardPreviewPayload, ClipboardReader, FileIconStore, ImageStore, ListItemContext,
-    WritebackGuard, MAX_GROUP_ICON_BYTES,
+    detect_frontmost, enrich_list_item, ensure_paste_permission, is_excluded_by_pattern,
+    materialize_source, merge_clipboard_apps, normalize_group_icon, normalize_group_name,
+    normalize_group_svg, paste_into_frontmost, persist_and_notify, refresh_running_apps,
+    resolve_file_icon_path, sort_clipboard_apps, validate_image_file_name, AppIconStore,
+    AppsRegistry, ClipboardAppView, ClipboardPreviewPayload, ClipboardReader, FileIconStore,
+    ImageStore, ListItemContext, WritebackGuard, MAX_GROUP_ICON_BYTES,
 };
 use crate::core::{AppError, Result};
 use crate::db::items::{
@@ -376,35 +376,7 @@ pub async fn paste_clipboard_item(
     );
 
     crate::clipboard::write_to_clipboard(&store, guard.inner().as_ref(), &item, write_plain)?;
-
-    if window::is_clipboard_window_pinned() {
-        // 固定时窗口保持可见：macOS 上 panel 仍是 key window 会吞掉 ⌘V，需先 resign key
-        // 让键焦点回到前台 App 的窗口；Windows 剪贴板窗口 focusable=false，无需处理。
-        #[cfg(target_os = "macos")]
-        if let Err(err) = window::macos::resign_clipboard_panel_key(&app) {
-            log::warn!("resign clipboard panel key before paste failed: {err:?}");
-        }
-    } else if let Err(err) = window::hide_window(&app, CLIPBOARD_WINDOW_LABEL) {
-        log::warn!("hide clipboard window before paste failed: {err:?}");
-    }
-
-    // hide / resign 都是 run_on_main_thread 异步派发；不等一拍，simulate_paste 的 ⌘V
-    // 会赶在 panel 真正 order_out / 让出 key 前命中 panel 自己（webview 吞掉）。
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    crate::keystroke::simulate_paste()?;
-
-    // 固定窗口下粘贴完把 key 拿回来，让用户继续用键盘 / 列表操作；
-    // 再等一拍让 ⌘V 事件被目标 App 消费完，避免 make_key 抢回焦点把按键吞回 panel。
-    if window::is_clipboard_window_pinned() {
-        #[cfg(target_os = "macos")]
-        {
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            if let Err(err) = window::macos::make_clipboard_panel_key(&app) {
-                log::warn!("restore clipboard panel key after paste failed: {err:?}");
-            }
-        }
-    }
+    paste_into_frontmost(&app).await?;
 
     // 复用计数放在按键注入之后：DB 写入不拖慢粘贴，失败也不影响已完成的粘贴。
     if let Err(err) = mark_item_reused_if_enabled(&app, &pool, &id, item.kind).await {
@@ -432,7 +404,7 @@ fn should_write_plain_for_paste(
 }
 
 /// 按设置决定是否把复制 / 粘贴历史记录计为一次复用。
-async fn mark_item_reused_if_enabled(
+pub(super) async fn mark_item_reused_if_enabled(
     app: &AppHandle,
     pool: &SqlitePool,
     id: &str,
@@ -459,7 +431,7 @@ async fn mark_item_reused_if_enabled(
 }
 
 /// 从历史复制后按设置隐藏剪贴板窗口；固定状态下尊重用户显式 pin。
-fn hide_clipboard_window_after_copy(app: &AppHandle) {
+pub(super) fn hide_clipboard_window_after_copy(app: &AppHandle) {
     if window::is_clipboard_window_pinned() {
         return;
     }
@@ -539,32 +511,6 @@ pub async fn get_clipboard_item(
         enrich_list_item(&ctx, item).await?;
     }
     Ok(item)
-}
-
-/// macOS 模拟粘贴依赖辅助功能权限；未授权时 CGEvent 会被系统静默丢弃，用户只看到"没反应"。
-/// 这里先弹系统授权请求，再返回可读错误让前端 toast 提示；写回剪贴板也一并跳过，
-/// 避免用户误以为已粘贴。Windows 无此权限模型，直接放行。
-async fn ensure_paste_permission(app: &AppHandle) -> Result<()> {
-    #[cfg(target_os = "macos")]
-    {
-        if tauri_plugin_macos_permissions::check_accessibility_permission().await {
-            return Ok(());
-        }
-
-        tauri_plugin_macos_permissions::request_accessibility_permission().await;
-
-        let lang = crate::i18n::current_language(app);
-        Err(AppError::Clipboard(
-            crate::i18n::commands::label(lang, crate::i18n::commands::Key::AccessibilityRequired)
-                .to_owned(),
-        ))
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = app;
-        Ok(())
-    }
 }
 
 /// 保存文件对话框会短暂转移焦点；期间暂停剪贴板窗口失焦/外部点击自动隐藏。
@@ -963,7 +909,7 @@ pub async fn reveal_clipboard_item(
 }
 
 /// 记录已被删除 / 清理时的用户可见错误；id 只写日志。
-fn item_not_found(id: &str) -> AppError {
+pub(super) fn item_not_found(id: &str) -> AppError {
     log::warn!("clipboard item not found: {id}");
     AppError::localized(crate::i18n::commands::Key::ClipboardItemNotFound)
 }

@@ -148,6 +148,10 @@ pub enum ClipboardAction {
     TogglePinned,
     /// 编辑备注（恒在）。
     EditNote,
+    /// 编辑文本内容（`kind = text`）。
+    EditContent,
+    /// 转换后粘贴（`kind = text`），二级菜单列出可选转换。
+    PasteTransformed,
     /// 删除条目（恒在）。
     Delete,
 }

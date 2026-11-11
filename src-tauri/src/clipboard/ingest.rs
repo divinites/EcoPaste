@@ -26,7 +26,7 @@ pub const SUMMARY_MAX_CHARS: usize = 256;
 
 /// 从纯文本生成列表摘要：trim 后按 [`SUMMARY_MAX_CHARS`] 字符截断。
 /// 输入空串返回 `None`。HTML/RTF 也用这个，输入是 OS 同时提供的纯文本，不解析富文本。
-fn make_summary(plain: &str) -> Option<String> {
+pub(super) fn make_summary(plain: &str) -> Option<String> {
     let trimmed = plain.trim();
     if trimmed.is_empty() {
         return None;

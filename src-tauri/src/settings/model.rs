@@ -128,6 +128,8 @@ pub struct Shortcuts {
     pub open_preference: String,
     /// 仅 Windows：用 Win+V 唤起剪贴板窗口，替代系统剪贴板历史面板。默认关闭。
     pub win_v: bool,
+    /// 全局：粘贴队列中的下一条。仅在队列非空时注册。
+    pub paste_next: String,
 }
 
 impl Default for Shortcuts {
@@ -136,6 +138,7 @@ impl Default for Shortcuts {
             open_clipboard: "Alt+C".into(),
             open_preference: "Alt+X".into(),
             win_v: false,
+            paste_next: "Alt+V".into(),
         }
     }
 }

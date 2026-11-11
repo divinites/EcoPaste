@@ -1,7 +1,8 @@
 use anyhow::anyhow;
 use std::mem::{size_of, zeroed};
 use winapi::um::winuser::{
-    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL,
+    GetAsyncKeyState, SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL,
+    VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 
 use crate::core::error::Result;
@@ -75,4 +76,11 @@ pub fn simulate_paste() -> Result<()> {
         return Err(anyhow!("SendInput injected {sent}/{} events", inputs.len()).into());
     }
     Ok(())
+}
+
+/// 是否仍有修饰键处于按下状态（高位为 1 表示按下）。
+pub fn modifiers_pressed() -> bool {
+    [VK_MENU, VK_SHIFT, VK_CONTROL, VK_LWIN, VK_RWIN]
+        .into_iter()
+        .any(|key| unsafe { GetAsyncKeyState(key) } as u16 & 0x8000 != 0)
 }

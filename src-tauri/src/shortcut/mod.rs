@@ -127,9 +127,19 @@ pub fn apply(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
         return Ok(());
     }
 
-    let desired: [(&'static str, &str); 2] = [
+    // 「粘贴下一条」只在粘贴队列非空时注册，平时不占用按键。
+    let queue_active = app
+        .try_state::<crate::clipboard::PasteQueue>()
+        .is_some_and(|queue| queue.is_active());
+    let paste_next = if queue_active {
+        shortcuts.paste_next.as_str()
+    } else {
+        ""
+    };
+    let desired: [(&'static str, &str); 3] = [
         ("open_clipboard", &shortcuts.open_clipboard),
         ("open_preference", &shortcuts.open_preference),
+        ("paste_next", paste_next),
     ];
 
     #[cfg(target_os = "windows")]
@@ -246,6 +256,16 @@ fn handle_event(app: &AppHandle, action: &'static str, event: ShortcutEvent) {
     if !matches!(event.state(), ShortcutState::Pressed) {
         return;
     }
+    if action == "paste_next" {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(err) = crate::clipboard::paste_next(&app).await {
+                log::warn!("paste next queued item failed: {err}");
+            }
+        });
+        return;
+    }
+
     let label = match action {
         "open_clipboard" => CLIPBOARD_WINDOW_LABEL,
         "open_preference" => PREFERENCE_WINDOW_LABEL,

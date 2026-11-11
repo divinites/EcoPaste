@@ -20,5 +20,15 @@ pub fn label(key: Key) -> &'static str {
         Key::AddNote => "Add Note",
         Key::EditNote => "Edit Note",
         Key::Delete => "Delete",
+        Key::EditContent => "Edit Content",
+        Key::PasteTransformed => "Paste As…",
+        Key::TransformTrim => "Trim Whitespace",
+        Key::TransformSingleLine => "Join into One Line",
+        Key::TransformUppercase => "UPPERCASE",
+        Key::TransformLowercase => "lowercase",
+        Key::TransformJsonPretty => "Pretty JSON",
+        Key::TransformJsonMinify => "Minified JSON",
+        Key::TransformUrlEncode => "URL Encoded",
+        Key::TransformUrlDecode => "URL Decoded",
     }
 }

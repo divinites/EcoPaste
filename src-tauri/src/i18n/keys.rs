@@ -17,6 +17,16 @@ pub enum ClipboardMenuKey {
     AddNote,
     EditNote,
     Delete,
+    EditContent,
+    PasteTransformed,
+    TransformTrim,
+    TransformSingleLine,
+    TransformUppercase,
+    TransformLowercase,
+    TransformJsonPretty,
+    TransformJsonMinify,
+    TransformUrlEncode,
+    TransformUrlDecode,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,6 +66,14 @@ pub enum CommandKey {
     BackupSettingsMissing,
     BackupVersionUnsupported,
     FilterPatternInvalid,
+    TransformInvalidJson,
+    TransformInvalidUrlEncoding,
+    ItemNotEditable,
+    ItemContentEmpty,
+    ItemContentTooLarge,
+    ItemContentDuplicate,
+    NothingToMerge,
+    PasteQueueEmpty,
 }
 
 #[derive(Debug, Clone, Copy)]

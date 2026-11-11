@@ -20,5 +20,15 @@ pub fn label(key: Key) -> &'static str {
         Key::AddNote => "添加备注",
         Key::EditNote => "编辑备注",
         Key::Delete => "删除",
+        Key::EditContent => "编辑内容",
+        Key::PasteTransformed => "粘贴为…",
+        Key::TransformTrim => "去除首尾空白",
+        Key::TransformSingleLine => "合并为单行",
+        Key::TransformUppercase => "大写",
+        Key::TransformLowercase => "小写",
+        Key::TransformJsonPretty => "格式化 JSON",
+        Key::TransformJsonMinify => "压缩 JSON",
+        Key::TransformUrlEncode => "URL 编码",
+        Key::TransformUrlDecode => "URL 解码",
     }
 }

@@ -39,7 +39,35 @@ pub enum ClipboardMenuAction {
     TogglePinned,
     MoveToGroup,
     EditNote,
+    EditContent,
+    PasteTransformed,
     Delete,
+}
+
+/// 「粘贴为…」二级菜单项：转换 id + 当前语言文案。
+pub(super) fn transform_entries(lang: Language) -> Vec<(&'static str, &'static str)> {
+    use crate::clipboard::TextTransform;
+    use crate::i18n::clipboard_menu::Key;
+
+    TextTransform::ALL
+        .into_iter()
+        .map(|transform| {
+            let key = match transform {
+                TextTransform::Trim => Key::TransformTrim,
+                TextTransform::SingleLine => Key::TransformSingleLine,
+                TextTransform::Uppercase => Key::TransformUppercase,
+                TextTransform::Lowercase => Key::TransformLowercase,
+                TextTransform::JsonPretty => Key::TransformJsonPretty,
+                TextTransform::JsonMinify => Key::TransformJsonMinify,
+                TextTransform::UrlEncode => Key::TransformUrlEncode,
+                TextTransform::UrlDecode => Key::TransformUrlDecode,
+            };
+            (
+                transform.id(),
+                crate::i18n::clipboard_menu::label(lang, key),
+            )
+        })
+        .collect()
 }
 
 impl ClipboardMenuAction {
@@ -85,6 +113,8 @@ impl ClipboardMenuAction {
                     Key::AddNote
                 }
             }
+            Self::EditContent => Key::EditContent,
+            Self::PasteTransformed => Key::PasteTransformed,
             Self::Delete => Key::Delete,
         };
 
@@ -105,6 +135,8 @@ impl ClipboardMenuAction {
             Self::TogglePinned => Some("CmdOrCtrl+T"),
             Self::MoveToGroup => None,
             Self::EditNote => Some("CmdOrCtrl+M"),
+            Self::EditContent => Some("CmdOrCtrl+E"),
+            Self::PasteTransformed => None,
             Self::Delete => Some("CmdOrCtrl+Backspace"),
         }
     }
@@ -116,6 +148,7 @@ pub(super) const ACTION_GROUPS: &[&[ClipboardMenuAction]] = &[
         ClipboardMenuAction::Paste,
         ClipboardMenuAction::PasteAsPlainText,
         ClipboardMenuAction::PasteAsPath,
+        ClipboardMenuAction::PasteTransformed,
         ClipboardMenuAction::Copy,
         ClipboardMenuAction::SaveImage,
     ],
@@ -130,6 +163,7 @@ pub(super) const ACTION_GROUPS: &[&[ClipboardMenuAction]] = &[
         ClipboardMenuAction::TogglePinned,
         ClipboardMenuAction::MoveToGroup,
         ClipboardMenuAction::EditNote,
+        ClipboardMenuAction::EditContent,
     ],
     &[ClipboardMenuAction::Delete],
 ];
@@ -204,6 +238,7 @@ mod native {
     /// 菜单项 id 前缀；`on_menu_event` 按前缀分流到本模块，避免与托盘菜单 id 冲突。
     const MENU_PREFIX: &str = "cim::";
     const MOVE_GROUP_PREFIX: &str = "cim::moveToGroup::";
+    const TRANSFORM_PREFIX: &str = "cim::pasteTransformed::";
 
     impl ClipboardMenuAction {
         fn id(self) -> &'static str {
@@ -221,6 +256,8 @@ mod native {
                 Self::TogglePinned => "cim::togglePinned",
                 Self::MoveToGroup => "cim::moveToGroup",
                 Self::EditNote => "cim::editNote",
+                Self::EditContent => "cim::editContent",
+                Self::PasteTransformed => "cim::pasteTransformed",
                 Self::Delete => "cim::delete",
             }
         }
@@ -240,10 +277,15 @@ mod native {
                 ClipboardMenuAction::TogglePinned,
                 ClipboardMenuAction::MoveToGroup,
                 ClipboardMenuAction::EditNote,
+                ClipboardMenuAction::EditContent,
+                ClipboardMenuAction::PasteTransformed,
                 ClipboardMenuAction::Delete,
             ];
             if id.starts_with(MOVE_GROUP_PREFIX) {
                 return Some(ClipboardMenuAction::MoveToGroup);
+            }
+            if id.starts_with(TRANSFORM_PREFIX) {
+                return Some(ClipboardMenuAction::PasteTransformed);
             }
 
             ALL.iter().copied().find(|a| a.id() == id)
@@ -254,8 +296,12 @@ mod native {
         format!("{MOVE_GROUP_PREFIX}{group_id}")
     }
 
+    /// 二级菜单项携带的值：移动分组时是分组 id，「粘贴为…」时是转换 id。
     fn group_id_from_menu_id(menu_id: &str) -> Option<String> {
-        menu_id.strip_prefix(MOVE_GROUP_PREFIX).map(str::to_owned)
+        menu_id
+            .strip_prefix(MOVE_GROUP_PREFIX)
+            .or_else(|| menu_id.strip_prefix(TRANSFORM_PREFIX))
+            .map(str::to_owned)
     }
 
     /// 当前活跃的菜单 + 正在弹菜单的目标项 id；菜单持有到下次 popup 前替换，
@@ -369,6 +415,21 @@ mod native {
                     continue;
                 }
 
+                if action == ClipboardMenuAction::PasteTransformed {
+                    let submenu = build_transform_submenu(
+                        app,
+                        lang,
+                        action.label(
+                            lang,
+                            request.is_favorite,
+                            request.is_pinned,
+                            request.has_note,
+                        ),
+                    )?;
+                    entries.push(Entry::Submenu(submenu));
+                    continue;
+                }
+
                 let item = MenuItem::with_id(
                     app,
                     action.id(),
@@ -434,6 +495,34 @@ mod native {
 
         Submenu::with_items(app, label, true, &refs)
             .context("build move group submenu")
+            .map_err(Into::into)
+    }
+
+    fn build_transform_submenu(
+        app: &AppHandle,
+        lang: Language,
+        label: &str,
+    ) -> Result<Submenu<Wry>> {
+        let items = super::transform_entries(lang)
+            .into_iter()
+            .map(|(id, text)| {
+                MenuItem::with_id(
+                    app,
+                    format!("{TRANSFORM_PREFIX}{id}"),
+                    text,
+                    true,
+                    None::<&str>,
+                )
+                .with_context(|| format!("build transform menu item {id}"))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let refs: Vec<&dyn IsMenuItem<Wry>> = items
+            .iter()
+            .map(|item| item as &dyn IsMenuItem<Wry>)
+            .collect();
+
+        Submenu::with_items(app, label, true, &refs)
+            .context("build transform submenu")
             .map_err(Into::into)
     }
 

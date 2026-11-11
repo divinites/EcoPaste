@@ -142,6 +142,15 @@ fn write_files_as_text(
     Ok(())
 }
 
+/// 把一段纯文本写回剪贴板（合并复制、转换粘贴使用），同样登记回环抑制。
+pub fn write_plain_text(guard: &WritebackGuard, text: String) -> Result<()> {
+    let ctx = ClipboardContext::new().map_err(clip_err)?;
+    guard.suppress(content_hash(ClipboardKind::Text, &text));
+    ctx.set(vec![ClipboardContent::Text(text)])
+        .map_err(clip_err)?;
+    Ok(())
+}
+
 fn clip_err<E: std::fmt::Display>(err: E) -> AppError {
     AppError::Clipboard(err.to_string())
 }

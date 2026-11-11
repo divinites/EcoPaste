@@ -3,11 +3,14 @@ mod apps_registry;
 mod cleanup;
 mod content_filter;
 mod detect;
+mod edit;
 mod file_icon_store;
 mod groups;
 mod guard;
 mod icon;
 mod ingest;
+mod paste;
+mod paste_queue;
 mod pause;
 mod payload;
 mod read;
@@ -15,6 +18,7 @@ mod secrets;
 mod sound;
 mod source;
 mod storage;
+mod transform;
 mod view;
 mod watcher;
 mod write;
@@ -25,6 +29,7 @@ pub use apps_registry::{
 };
 pub use content_filter::{is_excluded_by_pattern, validate_excluded_patterns};
 pub use detect::sanitize_css_color;
+pub use edit::edit_text_item;
 pub use file_icon_store::FileIconStore;
 pub use groups::{
     normalize_group_icon, normalize_group_name, normalize_group_svg, MAX_GROUP_ICON_BYTES,
@@ -34,6 +39,10 @@ pub use icon::{get_icon_cache_key, icon_png, DIR_CACHE_KEY};
 #[cfg(test)]
 pub use ingest::build_item;
 pub use ingest::build_item_with_settings;
+pub use paste::{ensure_paste_permission, paste_into_frontmost};
+pub use paste_queue::{
+    paste_next, paste_queue_state, set_paste_queue, PasteQueue, PasteQueueState,
+};
 pub use pause::{
     apply_skip_next, apply_user_pause, ClipboardPauseState, WatcherPause, WatcherSuspendGuard,
 };
@@ -42,13 +51,14 @@ pub use read::ClipboardReader;
 pub use sound::play_copy_sound;
 pub use source::detect_frontmost;
 pub use storage::ImageStore;
+pub use transform::{merge_plain_text, plain_text_of, TextTransform};
 pub use view::{
     build_clipboard_app_view, build_clipboard_preview_payload, default_saved_image_file_name,
     enrich_list_item, merge_clipboard_apps, resolve_file_icon_path, sort_clipboard_apps,
     validate_image_file_name, ClipboardAppView, ClipboardPreviewPayload, ListItemContext,
 };
 pub use watcher::{init, materialize_source, persist_and_notify};
-pub use write::write_to_clipboard;
+pub use write::{write_plain_text, write_to_clipboard};
 
 #[cfg(test)]
 pub(crate) mod test_lock {
