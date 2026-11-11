@@ -542,6 +542,11 @@
           "placeholder": "Alt+X",
           "title": "Open Preferences Window"
         },
+        "pasteNext": {
+          "description": "Active while the paste queue has records: each press pastes the next one. Select several records and choose \"Add to paste queue\".",
+          "placeholder": "Alt+V",
+          "title": "Paste Next Queued Record"
+        },
         "winV": {
           "description": "Press Win+V to summon EcoPaste instead of the Windows clipboard history panel.",
           "title": "Take Over Win+V"

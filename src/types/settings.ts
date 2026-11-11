@@ -87,6 +87,7 @@ export interface Shortcuts {
   openClipboard: string;
   openPreference: string;
   winV: boolean;
+  pasteNext: string;
 }
 
 export interface Content {

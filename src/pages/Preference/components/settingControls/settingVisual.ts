@@ -67,6 +67,7 @@ const SETTING_ICON_MAP: Record<string, string> = {
   "sensitive.redactSecrets": "i-lucide:scan-eye",
   "shortcuts.openClipboard": "i-lucide:clipboard",
   "shortcuts.openPreference": "i-lucide:settings",
+  "shortcuts.pasteNext": "i-lucide:list-ordered",
   "shortcuts.winV": "i-lucide:clipboard-list",
   "source.excludedApps": "i-lucide:shield-ban",
   "source.excludedPatterns": "i-lucide:regex",

@@ -47,7 +47,7 @@ const ShortcutRecorderControl: FC<ShortcutRecorderControlProps> = (props) => {
 export default ShortcutRecorderControl;
 
 /**
- * 偏好设置里两个全局快捷键必须互斥，避免同一个组合键触发多个动作。
+ * 偏好设置里的全局快捷键必须互斥，避免同一个组合键触发多个动作。
  */
 function resolveGlobalShortcutConflicts(
   t: TFunction<"preferences">,
@@ -62,12 +62,18 @@ function resolveGlobalShortcutConflicts(
     label: translateShortcutSettingTitle(t, "shortcuts.openPreference"),
     value: settings.shortcuts.openPreference,
   };
+  const pasteNextConflict = {
+    label: translateShortcutSettingTitle(t, "shortcuts.pasteNext"),
+    value: settings.shortcuts.pasteNext,
+  };
 
   switch (setting.id) {
     case "shortcuts.openClipboard":
-      return [openPreferenceConflict];
+      return [openPreferenceConflict, pasteNextConflict];
     case "shortcuts.openPreference":
-      return [openClipboardConflict];
+      return [openClipboardConflict, pasteNextConflict];
+    case "shortcuts.pasteNext":
+      return [openClipboardConflict, openPreferenceConflict];
     default:
       return [] satisfies ShortcutRecorderConflict[];
   }

@@ -805,6 +805,15 @@ export const preferenceTabs: PreferenceTab[] = [
               return settings.shortcuts.openPreference;
             },
           },
+          {
+            control: { type: "shortcutRecorder" },
+            id: "shortcuts.pasteNext",
+            keywords: ["shortcut", "hotkey", "paste", "queue", "next"],
+            path: ["shortcuts", "pasteNext"],
+            value: (settings) => {
+              return settings.shortcuts.pasteNext;
+            },
+          },
           ...(isWin
             ? [
                 {

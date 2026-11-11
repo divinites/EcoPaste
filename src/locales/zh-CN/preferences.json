@@ -542,6 +542,11 @@
           "placeholder": "Alt+X",
           "title": "打开偏好设置窗口"
         },
+        "pasteNext": {
+          "description": "粘贴队列中有记录时生效：每按一次粘贴下一条。在列表中多选后选择「加入粘贴队列」。",
+          "placeholder": "Alt+V",
+          "title": "粘贴队列下一条"
+        },
         "winV": {
           "description": "按 Win+V 唤起 EcoPaste，替代 Windows 系统剪贴板历史面板。",
           "title": "接管 Win+V"
