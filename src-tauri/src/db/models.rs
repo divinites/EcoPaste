@@ -226,6 +226,8 @@ pub struct ClipboardItemQuery {
     pub group: Option<ClipboardGroupFilter>,
     pub keyword: Option<String>,
     pub sort: ClipboardItemSort,
+    /// 关键词走 FTS 时按 `bm25` 相关度排序（置顶仍前置）；由命令层按设置写入，前端传值会被覆盖。
+    pub relevance: bool,
     pub limit: i64,
     pub offset: i64,
 }
@@ -251,6 +253,7 @@ impl Default for ClipboardItemQuery {
             group: None,
             keyword: None,
             sort: ClipboardItemSort::UpdatedAt,
+            relevance: false,
             limit: 20,
             offset: 0,
         }

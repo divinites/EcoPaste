@@ -312,6 +312,8 @@ pub struct CleanupOutcome {
 }
 
 /// 历史清理：按「时间下限」和「最大条数」删除条目；置顶 / 收藏项一律保留。
+/// 两项都以 `updated_at`（最近一次复制 / 复用）为准：重新复制过的旧内容排在列表顶部，
+/// 不能因为首次创建时间早就被清掉。
 /// 返回删除行数与被删图片的文件名。`older_than = None` 跳过时长清理；`max_count = None` 或 `Some(0)` 跳过条数清理。
 pub async fn cleanup_history(
     pool: &SqlitePool,
@@ -323,7 +325,7 @@ pub async fn cleanup_history(
     if let Some(cutoff) = older_than {
         let rows = sqlx::query_as::<_, (ClipboardKind, String)>(
             "DELETE FROM clipboard_items \
-             WHERE is_pinned = 0 AND is_favorite = 0 AND created_at < ? \
+             WHERE is_pinned = 0 AND is_favorite = 0 AND updated_at < ? \
              RETURNING kind, content",
         )
         .bind(cutoff)
@@ -334,13 +336,13 @@ pub async fn cleanup_history(
     }
 
     if let Some(max) = max_count.filter(|n| *n > 0) {
-        // 仅在非置顶 / 非收藏集合内按 created_at DESC 保留前 max 条，多余的删除。
+        // 仅在非置顶 / 非收藏集合内按 updated_at DESC 保留前 max 条，多余的删除。
         // SQLite 中 `LIMIT -1 OFFSET n` 表示「跳过前 n 条，剩下全要」。
         let rows = sqlx::query_as::<_, (ClipboardKind, String)>(
             "DELETE FROM clipboard_items WHERE id IN ( \
                  SELECT id FROM clipboard_items \
                  WHERE is_pinned = 0 AND is_favorite = 0 \
-                 ORDER BY created_at DESC \
+                 ORDER BY updated_at DESC, created_at DESC \
                  LIMIT -1 OFFSET ? \
              ) \
              RETURNING kind, content",
@@ -400,8 +402,9 @@ enum KeywordFilter {
     None,
     /// `clipboard_items_fts MATCH ?` 的表达式，已含前缀通配。
     Fts(String),
-    /// 已转义 `% _ \` 的关键词；下游统一拼成 `%<kw>%` 多列模糊匹配。
-    Like(String),
+    /// 按空白拆分、逐个转义 `% _ \` 的关键词；每个词各自拼成 `%<kw>%` 多列模糊匹配，词之间 AND，
+    /// 与 FTS 多 token 的 AND 语义一致。
+    Like(Vec<String>),
 }
 
 impl KeywordFilter {
@@ -427,7 +430,7 @@ impl KeywordFilter {
             }
         }
 
-        Self::Like(escape_like(trimmed))
+        Self::Like(trimmed.split_whitespace().map(escape_like).collect())
     }
 }
 
@@ -467,6 +470,15 @@ async fn fetch_items(
     push_filter_clauses(&mut qb, q, &keyword);
 
     qb.push(" ORDER BY clipboard_items.is_pinned DESC, ");
+    if let (true, KeywordFilter::Fts(expr)) = (q.relevance, &keyword) {
+        // bm25 越小越相关；相关度相同再落回用户选择的排序键。
+        qb.push(
+            "(SELECT bm25(clipboard_items_fts) FROM clipboard_items_fts \
+             WHERE clipboard_items_fts MATCH ",
+        )
+        .push_bind(expr.clone())
+        .push(" AND clipboard_items_fts.rowid = clipboard_items.rowid) ASC, ");
+    }
     match q.sort {
         ClipboardItemSort::CreatedAt => {
             qb.push("clipboard_items.created_at DESC");
@@ -523,15 +535,17 @@ fn push_filter_clauses(
             .push_bind(expr.clone())
             .push(")");
         }
-        KeywordFilter::Like(kw) => {
+        KeywordFilter::Like(tokens) => {
             // FTS 索引覆盖 search_text / note 两列，LIKE 兜底也跟齐，
             // 让 1–2 字符短词的命中范围与长词一致。
-            let pattern = format!("%{kw}%");
-            qb.push(" AND (clipboard_items.search_text LIKE ")
-                .push_bind(pattern.clone())
-                .push(" ESCAPE '\\' OR clipboard_items.note LIKE ")
-                .push_bind(pattern)
-                .push(" ESCAPE '\\')");
+            for kw in tokens {
+                let pattern = format!("%{kw}%");
+                qb.push(" AND (clipboard_items.search_text LIKE ")
+                    .push_bind(pattern.clone())
+                    .push(" ESCAPE '\\' OR clipboard_items.note LIKE ")
+                    .push_bind(pattern)
+                    .push(" ESCAPE '\\')");
+            }
         }
     }
     // group（UI Tab）覆盖显式 kind / favorite；为 None 时回退到显式字段（单测使用）。
@@ -1174,6 +1188,7 @@ mod tests {
         let mk = |id: &str, ts: i64, fav: bool, pin: bool| {
             let mut it = sample_item(id);
             it.created_at = DateTime::from_timestamp(ts, 0).unwrap();
+            it.updated_at = it.created_at;
             it.is_favorite = fav;
             it.is_pinned = pin;
             it
@@ -1205,15 +1220,18 @@ mod tests {
         for n in 0..5i64 {
             let mut it = sample_item(&format!("p{n}"));
             it.created_at = DateTime::from_timestamp(1_000 + n, 0).unwrap();
+            it.updated_at = it.created_at;
             insert_item(&pool, &it).await.unwrap();
         }
         let mut fav = sample_item("fav");
         fav.is_favorite = true;
         fav.created_at = DateTime::from_timestamp(500, 0).unwrap();
+        fav.updated_at = fav.created_at;
         insert_item(&pool, &fav).await.unwrap();
         let mut pin = sample_item("pin");
         pin.is_pinned = true;
         pin.created_at = DateTime::from_timestamp(400, 0).unwrap();
+        pin.updated_at = pin.created_at;
         insert_item(&pool, &pin).await.unwrap();
 
         let outcome = cleanup_history(&pool, None, Some(2)).await.unwrap();
@@ -1250,8 +1268,10 @@ mod tests {
         img.content = "cafe1234.png".to_owned();
         img.content_hash = content_hash(ClipboardKind::Image, "cafe1234.png");
         img.created_at = DateTime::from_timestamp(1_000, 0).unwrap();
+        img.updated_at = img.created_at;
         let mut txt = sample_item("txt");
         txt.created_at = DateTime::from_timestamp(1_000, 0).unwrap();
+        txt.updated_at = txt.created_at;
         insert_item(&pool, &img).await.unwrap();
         insert_item(&pool, &txt).await.unwrap();
 
@@ -1272,11 +1292,11 @@ mod tests {
         // 1–2 字符走 LIKE（含 CJK）。
         assert_eq!(
             KeywordFilter::from_keyword(Some("a")),
-            KeywordFilter::Like("a".to_owned())
+            KeywordFilter::Like(vec!["a".to_owned()])
         );
         assert_eq!(
             KeywordFilter::from_keyword(Some("中文")),
-            KeywordFilter::Like("中文".to_owned())
+            KeywordFilter::Like(vec!["中文".to_owned()])
         );
 
         // ≥3 字符走 FTS。
@@ -1300,16 +1320,16 @@ mod tests {
         // 且 FTS5 多 token 默认 AND，整条表达式会被任一短词拖成 0 结果 → 必须降级 LIKE。
         assert_eq!(
             KeywordFilter::from_keyword(Some("a b")),
-            KeywordFilter::Like("a b".to_owned())
+            KeywordFilter::Like(vec!["a".to_owned(), "b".to_owned()])
         );
         assert_eq!(
             KeywordFilter::from_keyword(Some("ab cd")),
-            KeywordFilter::Like("ab cd".to_owned())
+            KeywordFilter::Like(vec!["ab".to_owned(), "cd".to_owned()])
         );
         // 混合长度：只要有一个分词 <3 字符，整条 FTS 表达式就会被拖成 0 命中 → LIKE。
         assert_eq!(
             KeywordFilter::from_keyword(Some("foo b")),
-            KeywordFilter::Like("foo b".to_owned())
+            KeywordFilter::Like(vec!["foo".to_owned(), "b".to_owned()])
         );
         // 所有分词均 ≥3 字符仍走 FTS（回归保障，语义不变）。
         assert_eq!(
@@ -1333,7 +1353,7 @@ mod tests {
         };
 
         // 旧逻辑按整串字符数（5 ≥ 3）判走 FTS：`"ab"* "cd"*`，两个 token 均 <3 字符，
-        // trigram 返回 0 行 → 搜不到刚插入的记录。现按分词长度降级 LIKE `%ab cd%`，命中。
+        // trigram 返回 0 行 → 搜不到刚插入的记录。现按分词长度降级 LIKE，每个词各自匹配。
         let found = query_items(&pool, &q).await.unwrap();
         assert_eq!(ids(&found), ["short"]);
     }
@@ -1343,5 +1363,111 @@ mod tests {
         assert_eq!(escape_like("100%"), "100\\%");
         assert_eq!(escape_like("a_b"), "a\\_b");
         assert_eq!(escape_like("c:\\path"), "c:\\\\path");
+    }
+
+    #[tokio::test]
+    async fn like_fallback_matches_tokens_in_any_order() {
+        let pool = memory_pool().await;
+        let mut item = sample_item("order");
+        item.search_text = Some("cd xx ab".to_owned());
+        insert_item(&pool, &item).await.unwrap();
+
+        let q = ClipboardItemQuery {
+            keyword: Some("ab cd".to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(ids(&query_items(&pool, &q).await.unwrap()), ["order"]);
+
+        let miss = ClipboardItemQuery {
+            keyword: Some("ab zz".to_owned()),
+            ..Default::default()
+        };
+        assert!(query_items(&pool, &miss).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn cleanup_history_keeps_recently_reused_old_items() {
+        let pool = memory_pool().await;
+        let mut reused = sample_item("reused");
+        reused.created_at = DateTime::from_timestamp(1_000, 0).unwrap();
+        reused.updated_at = DateTime::from_timestamp(9_000, 0).unwrap();
+        insert_item(&pool, &reused).await.unwrap();
+
+        let cutoff = DateTime::from_timestamp(5_000, 0).unwrap();
+        let outcome = cleanup_history(&pool, Some(cutoff), None).await.unwrap();
+        assert_eq!(outcome.removed, 0);
+    }
+
+    #[tokio::test]
+    async fn relevance_sort_orders_fts_hits_by_bm25() {
+        let pool = memory_pool().await;
+        let mk = |id: &str, text: &str, ts: i64| {
+            let mut it = sample_item(id);
+            it.content = text.to_owned();
+            it.content_hash = content_hash(ClipboardKind::Text, text);
+            it.search_text = Some(text.to_owned());
+            it.created_at = DateTime::from_timestamp(ts, 0).unwrap();
+            it.updated_at = it.created_at;
+            it
+        };
+        // `weak` 更新但只命中一次且文本更长；`strong` 更旧但密集命中。
+        insert_item(&pool, &mk("strong", "apple apple apple", 1_000))
+            .await
+            .unwrap();
+        insert_item(
+            &pool,
+            &mk(
+                "weak",
+                "apple and a very long sentence about many other unrelated things",
+                9_000,
+            ),
+        )
+        .await
+        .unwrap();
+
+        let base = ClipboardItemQuery {
+            keyword: Some("apple".to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(
+            ids(&query_items(&pool, &base).await.unwrap()),
+            ["weak", "strong"]
+        );
+
+        let relevance = ClipboardItemQuery {
+            relevance: true,
+            ..base
+        };
+        assert_eq!(
+            ids(&query_items(&pool, &relevance).await.unwrap()),
+            ["strong", "weak"]
+        );
+    }
+
+    #[tokio::test]
+    async fn metadata_updates_keep_fts_in_sync() {
+        let pool = memory_pool().await;
+        let mut item = sample_item("meta");
+        item.search_text = Some("needle haystack".to_owned());
+        insert_item(&pool, &item).await.unwrap();
+
+        toggle_item_favorite(&pool, "meta").await.unwrap();
+        increment_item_use_count(&pool, "meta").await.unwrap();
+        update_item_note(&pool, "meta", Some("memo text"))
+            .await
+            .unwrap();
+
+        let search = |kw: &str| ClipboardItemQuery {
+            keyword: Some(kw.to_owned()),
+            ..Default::default()
+        };
+        assert_eq!(
+            ids(&query_items(&pool, &search("needle")).await.unwrap()),
+            ["meta"]
+        );
+        assert_eq!(
+            ids(&query_items(&pool, &search("memo")).await.unwrap()),
+            ["meta"]
+        );
     }
 }

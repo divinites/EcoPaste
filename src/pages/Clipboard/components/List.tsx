@@ -128,6 +128,7 @@ const List: FC<ListProps> = (props) => {
   const middleClick = settings.clipboard.content.middleClick;
   const display = settings.clipboard.display;
   const sort = settings.clipboard.content.sort;
+  const relevance = settings.clipboard.search.sortByRelevance;
   const redactSecrets = settings.clipboard.sensitive.redactSecrets;
   const quickActions = settings.clipboard.content.itemActions;
   const deleteFavoriteItems = settings.clipboard.content.deleteFavoriteItems;
@@ -156,6 +157,7 @@ const List: FC<ListProps> = (props) => {
     groupId: groupId ?? void 0,
     keyword,
     kind: category ?? void 0,
+    relevance,
     sort,
   });
   // 横向模式下 Virtuoso 的 sticky top items 会固定在最左侧遮住滚动内容，置顶条目仅保留排序与标识。

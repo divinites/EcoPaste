@@ -62,6 +62,7 @@ const SETTING_ICON_MAP: Record<string, string> = {
   "search.clearOnHide": "i-lucide:eraser",
   "search.defaultFocus": "i-lucide:scan-search",
   "search.sort": "i-lucide:arrow-down-up",
+  "search.sortByRelevance": "i-lucide:list-ordered",
   "sensitive.collectSecrets": "i-lucide:key-round",
   "sensitive.redactSecrets": "i-lucide:scan-eye",
   "shortcuts.openClipboard": "i-lucide:clipboard",

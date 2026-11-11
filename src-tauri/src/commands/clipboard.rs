@@ -528,10 +528,11 @@ pub async fn list_clipboard_items(
     query: Option<ClipboardItemQuery>,
 ) -> Result<ClipboardItemPage> {
     let pool = db.pool().await;
-    let q = query.unwrap_or_default();
+    let settings = app.state::<SettingsStore>().snapshot();
+    let mut q = query.unwrap_or_default();
+    q.relevance = settings.clipboard.search.sort_by_relevance;
     let (mut items, total) = crate::db::items::query_items_page(&pool, &q).await?;
     let now = Local::now();
-    let settings = app.state::<SettingsStore>().snapshot();
     let file_entry_limit = settings.clipboard.display.file_entry_limit();
     let redact_sensitive = settings.clipboard.sensitive.redact_secrets;
     for item in &mut items {

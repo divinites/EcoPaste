@@ -139,6 +139,8 @@ export interface ClipboardItemQuery {
   group?: ClipboardGroup;
   keyword?: string;
   sort?: ClipboardItemSort;
+  /** 仅作为刷新依赖；Rust 以设置 `clipboard.search.sortByRelevance` 为准。 */
+  relevance?: boolean;
   limit?: number;
   offset?: number;
 }

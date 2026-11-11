@@ -515,6 +515,10 @@
             "useCountDesc": "Usage Frequency"
           },
           "title": "Default Sort Order"
+        },
+        "sortByRelevance": {
+          "description": "Order search results by match quality when every keyword has at least 3 characters. Pinned records stay on top.",
+          "title": "Sort Search Results by Relevance"
         }
       },
       "sensitive": {

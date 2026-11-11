@@ -146,6 +146,7 @@ export interface History {
 export interface Search {
   defaultFocus: boolean;
   clearOnHide: boolean;
+  sortByRelevance: boolean;
 }
 
 export interface Window {

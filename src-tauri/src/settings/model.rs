@@ -549,6 +549,8 @@ pub struct Search {
     pub default_focus: bool,
     /// 剪贴板窗口隐藏时清空搜索关键词。
     pub clear_on_hide: bool,
+    /// 搜索命中全文索引时按相关度排序，而不是按列表默认排序。
+    pub sort_by_relevance: bool,
 }
 
 impl Default for Search {
@@ -556,6 +558,7 @@ impl Default for Search {
         Self {
             default_focus: false,
             clear_on_hide: true,
+            sort_by_relevance: false,
         }
     }
 }

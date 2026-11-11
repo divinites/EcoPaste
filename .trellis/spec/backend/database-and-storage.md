@@ -19,8 +19,14 @@ Do not create a fresh pool in normal commands. Repository functions accept
 ## Migrations and Models
 
 Migrations live in `src-tauri/migrations/`. `0001_init.sql` defines
-`clipboard_groups`, `clipboard_apps`, `clipboard_items`, and `file_type_icons`.
-`0002_fts.sql` defines the FTS5 table and triggers.
+`clipboard_groups`, `clipboard_apps`, `clipboard_items`, `file_type_icons`, and
+the FTS5 table with its triggers. `0002_list_indexes_and_fts_trigger.sql`
+narrows the FTS update trigger to `UPDATE OF search_text, note` and adds the
+list sort indexes `(is_pinned, updated_at, created_at)`,
+`(is_pinned, created_at)`, `(is_pinned, use_count, created_at)` and `group_id`.
+
+Any column that feeds FTS must be listed in the `UPDATE OF` clause; metadata
+updates (favorite, pinned, group, use_count) must not touch FTS.
 
 The app has shipped a stable release line, so schema changes must be expressed
 as new migrations with an explicit upgrade path. When changing schema, update all
@@ -48,15 +54,20 @@ Do not update it for metadata-only edits:
 - `increment_item_use_count` is the path that refreshes `updated_at`.
 
 This distinction feeds the default `updatedAtDesc` sort used by the clipboard
-list.
+list. History cleanup (retention and max count) is also based on `updated_at`,
+so a reused old record at the top of the list is not purged.
 
 ## Search and Pagination
 
 List search is owned by `db::items::query_items_page`:
 
 - Keywords with 3 or more characters use FTS5 trigram search.
-- Keywords with 1 or 2 characters use escaped `LIKE` across `search_text` and
-  `note`.
+- If any whitespace token has 1 or 2 characters, every token becomes its own
+  escaped `LIKE` clause across `search_text` and `note`, joined with `AND`
+  (same semantics as FTS multi-token).
+- `clipboard.search.sortByRelevance` makes FTS hits order by `bm25` after the
+  pinned prefix. The command layer copies the setting into
+  `ClipboardItemQuery.relevance`; the frontend value is only a refresh key.
 - UI tab filters are represented by `ClipboardGroupFilter` and override explicit
   `kind`/`favorite` fields.
 - Pinned items are always sorted before the chosen sort order.

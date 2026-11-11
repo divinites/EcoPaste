@@ -515,6 +515,10 @@
             "useCountDesc": "使用频率"
           },
           "title": "默认排序方式"
+        },
+        "sortByRelevance": {
+          "description": "搜索关键词不少于 3 个字符时，按匹配程度排序结果；置顶记录仍在最前。",
+          "title": "搜索结果按相关度排序"
         }
       },
       "sensitive": {

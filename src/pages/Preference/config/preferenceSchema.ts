@@ -240,6 +240,15 @@ export const preferenceTabs: PreferenceTab[] = [
             },
           },
           {
+            control: { type: "switch" },
+            id: "search.sortByRelevance",
+            keywords: ["search", "relevance", "rank", "sort"],
+            path: ["clipboard", "search", "sortByRelevance"],
+            value: (settings) => {
+              return settings.clipboard.search.sortByRelevance;
+            },
+          },
+          {
             control: { options: CLIPBOARD_SORT_OPTIONS, type: "select" },
             id: "search.sort",
             keywords: ["sort", "frequency", "usage", "created", "updated"],
