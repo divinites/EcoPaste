@@ -1,8 +1,6 @@
 import { useMount, useUnmount } from "ahooks";
 import { Empty, Spin } from "antd";
-import type { TFunction } from "i18next";
 import type {
-  CSSProperties,
   FC,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -51,10 +49,8 @@ import type {
   ClipboardGroupRecord,
   ClipboardItem,
   ClipboardKind,
-  ClipboardRange,
 } from "@/types/clipboard";
 import type { ItemAction } from "@/types/settings";
-import { cn } from "@/utils/cn";
 import { isMac } from "@/utils/is";
 import type { WindowVisibilityPayload } from "../hooks/previewController";
 import {
@@ -62,6 +58,22 @@ import {
   useClipboardPreviewController,
 } from "../hooks/useClipboardPreviewController";
 import ClipboardCard from "./cards/ClipboardCard";
+import ListPlaceholderItem from "./ListPlaceholderItem";
+import { getEmptyDescription } from "./listEmptyDescription";
+import {
+  countLeadingPinnedItems,
+  getAllowedClipboardActions,
+  getAllowedItemActions,
+  getCurrentGroupName,
+  getNavigationDirection,
+  getNextKeyboardIndex,
+  getOpenClipboardAction,
+  getSelectedIdAfterDelete,
+  itemWrapperClass,
+  itemWrapperStyle,
+  shouldRefreshCurrentGroup,
+  shouldUseNativeCopy,
+} from "./listHelpers";
 import NoteModal from "./NoteModal";
 
 /** 前 10 项的快捷键：index 0-8 对应 1-9，index 9 对应 0 */
@@ -909,7 +921,16 @@ const List: FC<ListProps> = (props) => {
 
   function renderItemContent(index: number) {
     const item = getItem(index);
-    if (!item) return renderPlaceholderItem(index);
+    if (!item) {
+      return (
+        <ListPlaceholderItem
+          cardSize={cardSize}
+          index={index}
+          isHorizontal={isHorizontal}
+          total={total}
+        />
+      );
+    }
 
     const handlePointerEnter = (event: ReactPointerEvent<HTMLDivElement>) => {
       handleItemPointerEnter(item, event);
@@ -1114,41 +1135,6 @@ const List: FC<ListProps> = (props) => {
     );
   }
 
-  function renderPlaceholderItem(index: number) {
-    if (isHorizontal) {
-      return (
-        <div
-          aria-hidden="true"
-          className={itemWrapperClass(isHorizontal, index, total)}
-          style={itemWrapperStyle(isHorizontal, cardSize)}
-        >
-          <div className="size-full overflow-hidden rounded-4 bg-ant-fill-quaternary ring-1 ring-ant-border-secondary">
-            <div className="h-13 bg-ant-fill-secondary" />
-            <div className="flex flex-col gap-2 p-3">
-              <span className="h-3 w-9/12 rounded-1 bg-ant-fill-secondary" />
-              <span className="h-3 w-6/12 rounded-1 bg-ant-fill-secondary" />
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div aria-hidden="true" className={cn("px-3", { "pt-3": index !== 0 })}>
-        <div className="min-h-24 rounded-2 border border-ant-border-secondary bg-ant-fill-quaternary p-2">
-          <div className="flex items-center gap-1 text-ant-secondary text-xs">
-            <span className="size-4 rounded-1 bg-ant-fill-secondary" />
-            <span className="h-3 w-16 rounded-1 bg-ant-fill-secondary" />
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            <span className="h-3 w-9/12 rounded-1 bg-ant-fill-secondary" />
-            <span className="h-3 w-6/12 rounded-1 bg-ant-fill-secondary" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   /**
    * 根据导航方向计算下一项。
    */
@@ -1207,292 +1193,6 @@ const List: FC<ListProps> = (props) => {
   }
 };
 
-/**
- * 生成空列表文案，按搜索词、范围、分类和自定义分组组合出具体提示。
- */
-function getEmptyDescription(
-  t: TFunction<"clipboard">,
-  keyword: string,
-  range: ClipboardRange,
-  category: ClipboardKind | null,
-  groupId: string | null,
-  groupName: string | null,
-) {
-  const isSearching = keyword.length > 0;
-  const isFavorite = range === "favorite";
-  const hasGroup = groupId !== null;
-  const categoryLabel = category ? t(`empty.categories.${category}`) : "";
-  const groupLabel = groupName ?? t("empty.groupFallback");
-
-  if (isSearching) {
-    return getSearchingEmptyDescription(
-      t,
-      keyword,
-      isFavorite,
-      hasGroup,
-      groupLabel,
-      categoryLabel,
-    );
-  }
-
-  if (hasGroup) {
-    if (isFavorite && category) {
-      return t("empty.groupFavoriteCategory", {
-        category: categoryLabel,
-        group: groupLabel,
-      });
-    }
-
-    if (isFavorite) {
-      return t("empty.groupFavorites", { group: groupLabel });
-    }
-
-    if (category) {
-      return t("empty.groupCategory", {
-        category: categoryLabel,
-        group: groupLabel,
-      });
-    }
-
-    return t("empty.group", { group: groupLabel });
-  }
-
-  if (isFavorite && category) {
-    return t("empty.favoriteCategory", { category: categoryLabel });
-  }
-
-  if (category) {
-    return t("empty.category", { category: categoryLabel });
-  }
-
-  return t(isFavorite ? "empty.favorites" : "empty.history");
-}
-
-/**
- * 生成搜索空状态文案，覆盖范围 / 分类 / 分组三种过滤维度。
- */
-function getSearchingEmptyDescription(
-  t: TFunction<"clipboard">,
-  keyword: string,
-  isFavorite: boolean,
-  hasGroup: boolean,
-  groupLabel: string,
-  categoryLabel: string,
-) {
-  const hasCategory = categoryLabel.length > 0;
-
-  if (hasGroup) {
-    if (isFavorite && hasCategory) {
-      return t("empty.searchGroupFavoriteCategory", {
-        category: categoryLabel,
-        group: groupLabel,
-        keyword,
-      });
-    }
-
-    if (isFavorite) {
-      return t("empty.searchGroupFavorites", {
-        group: groupLabel,
-        keyword,
-      });
-    }
-
-    if (hasCategory) {
-      return t("empty.searchGroupCategory", {
-        category: categoryLabel,
-        group: groupLabel,
-        keyword,
-      });
-    }
-
-    return t("empty.searchGroup", { group: groupLabel, keyword });
-  }
-
-  if (isFavorite && hasCategory) {
-    return t("empty.searchFavoriteCategory", {
-      category: categoryLabel,
-      keyword,
-    });
-  }
-
-  if (isFavorite) {
-    return t("empty.searchFavorites", { keyword });
-  }
-
-  if (hasCategory) {
-    return t("empty.searchCategory", { category: categoryLabel, keyword });
-  }
-
-  return t("empty.searchHistory", { keyword });
-}
-
-/**
- * 从当前已加载分组列表中取出选中分组名称；找不到时交给文案层兜底。
- */
-function getCurrentGroupName(
-  groups: ClipboardGroupRecord[],
-  groupId: string | null,
-) {
-  if (!groupId) return null;
-
-  const current = groups.find((record) => {
-    return record.id === groupId;
-  });
-
-  return current?.name ?? null;
-}
-
-/**
- * 把方向键映射为条目导航方向：竖向列表响应上下键，横向列表响应左右键；其余键返回 0。
- */
-function getNavigationDirection(
-  key: string,
-  isHorizontal: boolean,
-): -1 | 0 | 1 {
-  if (isHorizontal) {
-    if (key === "ArrowLeft") return -1;
-    if (key === "ArrowRight") return 1;
-
-    return 0;
-  }
-
-  if (key === "ArrowUp") return -1;
-  if (key === "ArrowDown") return 1;
-
-  return 0;
-}
-
-/**
- * 根据导航方向和当前选中 id 计算下一项索引。
- */
-function getNextKeyboardIndex(
-  getItemIndexById: (id: string) => number | null,
-  firstVisibleIndex: number,
-  selectedId: string | null,
-  total: number,
-  direction: -1 | 1,
-) {
-  const selectedIndex =
-    selectedId === null ? null : getItemIndexById(selectedId);
-  const currentIndex = selectedIndex ?? firstVisibleIndex;
-
-  if (direction === -1) {
-    return Math.max(0, currentIndex - 1);
-  }
-
-  return Math.min(total - 1, currentIndex + 1);
-}
-
-/**
- * 条目外层容器类：竖向模式只有左右内边距与行间距；
- * 横向模式撑满高度，首尾条目补齐面板两侧留白。
- */
-function itemWrapperClass(isHorizontal: boolean, index: number, total: number) {
-  if (!isHorizontal) {
-    return cn("px-3", { "pt-3": index !== 0 });
-  }
-
-  return cn("box-content py-2 pl-4", { "pr-4": index === total - 1 });
-}
-
-/**
- * 横向条目的像素尺寸：卡片为正方形，宽高与测得的边长一致；尺寸未测出前不渲染条目尺寸。
- */
-function itemWrapperStyle(
-  isHorizontal: boolean,
-  cardSize: number,
-): CSSProperties | undefined {
-  if (!isHorizontal || cardSize <= 0) return void 0;
-
-  return { height: cardSize, width: cardSize };
-}
-
-/**
- * 按条目保护规则过滤右键菜单动作，避免受保护项出现删除入口。
- */
-function getAllowedClipboardActions(
-  actions: ClipboardAction[] | undefined,
-  item: ClipboardItem,
-  canDeleteItem: (item: ClipboardItem) => boolean,
-) {
-  if (canDeleteItem(item)) return actions;
-
-  return actions?.filter((action) => {
-    return action !== "delete";
-  });
-}
-
-/**
- * 从后端声明的右键动作中取出可由 Cmd/Ctrl+O 触发的“打开”动作。
- */
-function getOpenClipboardAction(actions: ClipboardAction[] | undefined) {
-  const openActions: ClipboardAction[] = [
-    "openLink",
-    "sendEmail",
-    "revealInFinder",
-    "revealInExplorer",
-  ];
-
-  return actions?.find((action) => {
-    return openActions.includes(action);
-  });
-}
-
-/**
- * 按条目保护规则过滤悬停快捷动作，避免受保护项出现删除按钮。
- */
-function getAllowedItemActions(
-  actions: readonly ItemAction[],
-  item: ClipboardItem,
-  canDeleteItem: (item: ClipboardItem) => boolean,
-) {
-  if (canDeleteItem(item)) return [...actions];
-
-  return actions.filter((action) => {
-    return action !== "delete";
-  });
-}
-
-/**
- * 删除当前 active 项后优先选后一项；删除末尾时回退到前一项。
- * 右键删除非 active 项时保留当前显式选中，避免意外跳选。
- */
-function getSelectedIdAfterDelete(
-  getItem: (index: number) => ClipboardItem | null,
-  getItemIndexById: (id: string) => number | null,
-  activeFallbackIndex: number,
-  selectedId: string | null,
-  deletedId: string,
-) {
-  const deletedIndex = getItemIndexById(deletedId);
-  if (deletedIndex === null) return selectedId;
-
-  const activeId =
-    selectedId ?? getItem(activeFallbackIndex)?.id ?? getItem(0)?.id ?? null;
-
-  if (activeId !== deletedId) return selectedId;
-
-  const nextItem = getItem(deletedIndex + 1) ?? getItem(deletedIndex - 1);
-
-  return nextItem?.id ?? null;
-}
-
-/**
- * 判断 Cmd/Ctrl+C 是否应交给浏览器原生复制，避免覆盖输入框或文本选区复制。
- */
-function shouldUseNativeCopy(event: KeyboardEvent) {
-  const target = event.target;
-  if (target instanceof HTMLElement) {
-    const tagName = target.tagName.toLowerCase();
-    if (target.isContentEditable) return true;
-    if (tagName === "input" || tagName === "textarea") return true;
-  }
-
-  const selection = window.getSelection();
-
-  return Boolean(selection && !selection.isCollapsed);
-}
-
 const computeItemKey = (index: number, item?: ClipboardItem) => {
   return item?.id ?? `placeholder-${index}`;
 };
@@ -1509,40 +1209,5 @@ const TopItemList: FC<TopItemListProps> = (props) => {
     </div>
   );
 };
-
-/**
- * 统计当前已加载页开头连续置顶条目数，供 Virtuoso sticky top items 使用。
- */
-function countLeadingPinnedItems(
-  getItem: (index: number) => ClipboardItem | null,
-) {
-  let count = 0;
-
-  while (true) {
-    const item = getItem(count);
-    if (!item?.isPinned) break;
-
-    count += 1;
-  }
-
-  return count;
-}
-
-/**
- * 判断普通剪贴板更新是否会出现在当前分组列表中。
- */
-function shouldRefreshCurrentGroup(
-  range: ClipboardRange,
-  category: ClipboardKind | null,
-  groupId: string | null,
-  kind?: ClipboardKind,
-) {
-  if (groupId) return false;
-  if (range === "favorite") return false;
-  if (!category) return true;
-  if (kind === void 0) return false;
-
-  return category === kind;
-}
 
 export default List;
