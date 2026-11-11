@@ -6,7 +6,7 @@
 
 use anyhow::Context;
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuBuilder, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::path::BaseDirectory;
 use tauri::tray::TrayIconBuilder;
 #[cfg(target_os = "windows")]
@@ -14,7 +14,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::clipboard::WatcherPause;
+use crate::clipboard::{ClipboardPauseState, WatcherPause};
 use crate::core::Result;
 use crate::i18n::tray as tray_i18n;
 use crate::i18n::tray::Key;
@@ -27,7 +27,12 @@ const TRAY_ID: &str = "app-tray";
 const GITHUB_URL: &str = "https://github.com/EcoPasteHub/EcoPaste";
 
 const MENU_PREFERENCE: &str = "tray::preference";
-const MENU_TOGGLE_LISTEN: &str = "tray::toggle_listen";
+const MENU_RESUME_LISTEN: &str = "tray::resume_listen";
+const MENU_PAUSE_5: &str = "tray::pause_5";
+const MENU_PAUSE_30: &str = "tray::pause_30";
+const MENU_PAUSE_60: &str = "tray::pause_60";
+const MENU_PAUSE_FOREVER: &str = "tray::pause_forever";
+const MENU_SKIP_NEXT: &str = "tray::skip_next";
 const MENU_OPEN_SOURCE: &str = "tray::open_source";
 const MENU_CHECK_FOR_UPDATES: &str = "tray::check_for_updates";
 const MENU_RELAUNCH: &str = "tray::relaunch";
@@ -36,13 +41,10 @@ const MENU_EXIT: &str = "tray::exit";
 pub fn init(app: &AppHandle, settings: &Settings) -> Result<()> {
     let lang = settings.appearance.language;
     let version = app.package_info().version.to_string();
-    let paused = app
-        .try_state::<WatcherPause>()
-        .map(|s| s.is_paused())
-        .unwrap_or(false);
+    let paused = pause_snapshot(app);
 
     let icon = load_icon(app)?;
-    let menu = build_menu(app, lang, &version, paused)?;
+    let menu = build_menu(app, lang, &version, &paused)?;
 
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
@@ -85,19 +87,27 @@ pub fn apply(app: &AppHandle, settings: &Settings) -> Result<()> {
         return Ok(());
     };
     let version = app.package_info().version.to_string();
-    let paused = app
-        .try_state::<WatcherPause>()
-        .map(|s| s.is_paused())
-        .unwrap_or(false);
-    let menu = build_menu(app, settings.appearance.language, &version, paused)?;
+    let paused = pause_snapshot(app);
+    let menu = build_menu(app, settings.appearance.language, &version, &paused)?;
     tray.set_menu(Some(menu)).context("tray set_menu failed")?;
     tray.set_visible(settings.general.tray_icon)
         .context("tray set_visible failed")?;
     Ok(())
 }
 
-/// 重建菜单但不动可见性，用于「停止/开启监听」翻转后只刷文案。
-fn rebuild_menu(app: &AppHandle) -> Result<()> {
+/// 当前用户暂停状态；监听尚未初始化时视为未暂停。
+fn pause_snapshot(app: &AppHandle) -> ClipboardPauseState {
+    app.try_state::<WatcherPause>()
+        .map(|pause| pause.snapshot())
+        .unwrap_or(ClipboardPauseState {
+            paused: false,
+            until: None,
+            skip_next: false,
+        })
+}
+
+/// 重建菜单但不动可见性，用于暂停状态变化后只刷文案。
+pub fn refresh_menu(app: &AppHandle) -> Result<()> {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return Ok(());
     };
@@ -106,11 +116,8 @@ fn rebuild_menu(app: &AppHandle) -> Result<()> {
         .map(|s| s.snapshot().appearance.language)
         .unwrap_or_default();
     let version = app.package_info().version.to_string();
-    let paused = app
-        .try_state::<WatcherPause>()
-        .map(|s| s.is_paused())
-        .unwrap_or(false);
-    let menu = build_menu(app, lang, &version, paused)?;
+    let paused = pause_snapshot(app);
+    let menu = build_menu(app, lang, &version, &paused)?;
     tray.set_menu(Some(menu)).context("tray set_menu failed")?;
     Ok(())
 }
@@ -132,7 +139,7 @@ fn build_menu(
     app: &AppHandle,
     lang: Language,
     version: &str,
-    paused: bool,
+    paused: &ClipboardPauseState,
 ) -> Result<Menu<tauri::Wry>> {
     let preference = MenuItem::with_id(
         app,
@@ -142,21 +149,21 @@ fn build_menu(
         None::<&str>,
     )
     .context("build preference menu item")?;
-    let toggle_listen = MenuItem::with_id(
+    let skip_next = MenuItem::with_id(
         app,
-        MENU_TOGGLE_LISTEN,
+        MENU_SKIP_NEXT,
         tray_i18n::label(
             lang,
-            if paused {
-                Key::StartListening
+            if paused.skip_next {
+                Key::CancelSkipNextCopy
             } else {
-                Key::StopListening
+                Key::SkipNextCopy
             },
         ),
-        true,
+        !paused.paused,
         None::<&str>,
     )
-    .context("build toggle_listen menu item")?;
+    .context("build skip_next menu item")?;
     let open_source = MenuItem::with_id(
         app,
         MENU_OPEN_SOURCE,
@@ -200,10 +207,41 @@ fn build_menu(
     let sep1 = PredefinedMenuItem::separator(app).context("build separator")?;
     let sep2 = PredefinedMenuItem::separator(app).context("build separator")?;
 
-    MenuBuilder::new(app)
+    let builder = MenuBuilder::new(app).item(&preference);
+    let builder = if paused.paused {
+        let resume_label = match paused.until {
+            Some(until) => format!(
+                "{} ({} {})",
+                tray_i18n::label(lang, Key::StartListening),
+                tray_i18n::label(lang, Key::PausedUntil),
+                until.with_timezone(&chrono::Local).format("%H:%M")
+            ),
+            None => tray_i18n::label(lang, Key::StartListening).to_owned(),
+        };
+        let resume = MenuItem::with_id(app, MENU_RESUME_LISTEN, resume_label, true, None::<&str>)
+            .context("build resume menu item")?;
+        builder.item(&resume)
+    } else {
+        let pause_menu = SubmenuBuilder::new(app, tray_i18n::label(lang, Key::PauseListening))
+            .text(MENU_PAUSE_5, tray_i18n::label(lang, Key::PauseFiveMinutes))
+            .text(
+                MENU_PAUSE_30,
+                tray_i18n::label(lang, Key::PauseThirtyMinutes),
+            )
+            .text(MENU_PAUSE_60, tray_i18n::label(lang, Key::PauseOneHour))
+            .separator()
+            .text(
+                MENU_PAUSE_FOREVER,
+                tray_i18n::label(lang, Key::PauseUntilResumed),
+            )
+            .build()
+            .context("build pause submenu")?;
+        builder.item(&pause_menu)
+    };
+
+    builder
         .items(&[
-            &preference,
-            &toggle_listen,
+            &skip_next,
             &sep1,
             &open_source,
             &check_for_updates,
@@ -224,15 +262,24 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
                 log::error!("tray open preference failed: {err:?}");
             }
         }
-        MENU_TOGGLE_LISTEN => {
-            if let Some(pause) = app.try_state::<WatcherPause>() {
-                let next = !pause.is_paused();
-                pause.set_paused(next);
-                log::info!("clipboard watcher paused = {next}");
-                if let Err(err) = rebuild_menu(app) {
-                    log::warn!("rebuild tray menu after toggle failed: {err}");
-                }
-            }
+        MENU_RESUME_LISTEN => {
+            crate::clipboard::apply_user_pause(app, None);
+        }
+        MENU_PAUSE_5 => {
+            crate::clipboard::apply_user_pause(app, Some(5));
+        }
+        MENU_PAUSE_30 => {
+            crate::clipboard::apply_user_pause(app, Some(30));
+        }
+        MENU_PAUSE_60 => {
+            crate::clipboard::apply_user_pause(app, Some(60));
+        }
+        MENU_PAUSE_FOREVER => {
+            crate::clipboard::apply_user_pause(app, Some(0));
+        }
+        MENU_SKIP_NEXT => {
+            let skip = !pause_snapshot(app).skip_next;
+            crate::clipboard::apply_skip_next(app, skip);
         }
         MENU_OPEN_SOURCE => {
             if let Err(err) = app.opener().open_url(GITHUB_URL, None::<&str>) {

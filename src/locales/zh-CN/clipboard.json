@@ -52,6 +52,18 @@
   },
   "header": {
     "clearRecords": "清空记录",
+    "listening": {
+      "cancelSkipNext": "取消忽略下一次复制",
+      "pause": "暂停监听",
+      "pause5": "暂停 5 分钟",
+      "pause30": "暂停 30 分钟",
+      "pause60": "暂停 1 小时",
+      "pausedForever": "监听已暂停，点击恢复",
+      "pausedUntil": "已暂停至 {{time}}，点击恢复",
+      "pauseForever": "直到手动恢复",
+      "skipNext": "忽略下一次复制",
+      "skipNextActive": "下一次复制不会被记录"
+    },
     "logoAlt": "EcoPaste 标志",
     "moreActions": "更多操作",
     "openPreference": "偏好设置",

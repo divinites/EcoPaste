@@ -22,6 +22,7 @@ export const TAURI_COMMAND = {
   GET_AUTOSTART: "get_autostart",
   GET_CLIPBOARD_IMAGE_PATH: "get_clipboard_image_path",
   GET_CLIPBOARD_ITEM: "get_clipboard_item",
+  GET_CLIPBOARD_PAUSE_STATE: "get_clipboard_pause_state",
   GET_CLIPBOARD_PREVIEW_PAYLOAD: "get_clipboard_preview_payload",
   GET_CLIPBOARD_PREVIEW_STATE: "get_clipboard_preview_state",
   GET_CONTEXT_MENU_PAYLOAD: "get_context_menu_payload",
@@ -61,6 +62,8 @@ export const TAURI_COMMAND = {
   REVEAL_CLIPBOARD_ITEM: "reveal_clipboard_item",
   SAVE_CLIPBOARD_IMAGE_TO_FILE: "save_clipboard_image_to_file",
   SET_AUTOSTART: "set_autostart",
+  SET_CLIPBOARD_PAUSE: "set_clipboard_pause",
+  SET_CLIPBOARD_SKIP_NEXT: "set_clipboard_skip_next",
   SET_CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED:
     "set_clipboard_window_auto_hide_suspended",
   SET_CLIPBOARD_WINDOW_EDITING: "set_clipboard_window_editing",

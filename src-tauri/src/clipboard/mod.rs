@@ -8,6 +8,7 @@ mod groups;
 mod guard;
 mod icon;
 mod ingest;
+mod pause;
 mod payload;
 mod read;
 mod secrets;
@@ -33,6 +34,9 @@ pub use icon::{get_icon_cache_key, icon_png, DIR_CACHE_KEY};
 #[cfg(test)]
 pub use ingest::build_item;
 pub use ingest::build_item_with_settings;
+pub use pause::{
+    apply_skip_next, apply_user_pause, ClipboardPauseState, WatcherPause, WatcherSuspendGuard,
+};
 pub use payload::{ClipboardPayload, ImagePayload, TextPayload};
 pub use read::ClipboardReader;
 pub use sound::play_copy_sound;
@@ -43,7 +47,7 @@ pub use view::{
     enrich_list_item, merge_clipboard_apps, resolve_file_icon_path, sort_clipboard_apps,
     validate_image_file_name, ClipboardAppView, ClipboardPreviewPayload, ListItemContext,
 };
-pub use watcher::{init, materialize_source, persist_and_notify, WatcherPause};
+pub use watcher::{init, materialize_source, persist_and_notify};
 pub use write::write_to_clipboard;
 
 #[cfg(test)]

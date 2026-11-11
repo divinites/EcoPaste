@@ -1260,31 +1260,10 @@ struct BackupItemRow {
     updated_at: DateTime<Utc>,
 }
 
-struct WatcherPauseRestore {
-    pause: Option<crate::clipboard::WatcherPause>,
-    previous: bool,
-}
-
-impl Drop for WatcherPauseRestore {
-    fn drop(&mut self) {
-        if let Some(pause) = &self.pause {
-            pause.set_paused(self.previous);
-        }
-    }
-}
-
 /// 暂停剪贴板监听，并在 guard drop 时恢复导入前的暂停状态。
-fn pause_watcher(app: &AppHandle) -> WatcherPauseRestore {
-    let pause = app.try_state::<crate::clipboard::WatcherPause>();
-    let previous = pause.as_ref().is_some_and(|state| state.is_paused());
-    if let Some(state) = pause.as_ref() {
-        state.set_paused(true);
-    }
-
-    WatcherPauseRestore {
-        pause: pause.map(|state| state.inner().clone()),
-        previous,
-    }
+fn pause_watcher(app: &AppHandle) -> Option<crate::clipboard::WatcherSuspendGuard> {
+    app.try_state::<crate::clipboard::WatcherPause>()
+        .map(|pause| pause.suspend())
 }
 
 /// 用备份数据库替换当前主数据库，并移除旧 WAL / SHM sidecar。

@@ -8,7 +8,6 @@
 //! 从而绕开其 `Send` 约束；只有 `Send` 的数据（`AppHandle`、`item`）会被
 //! 投递进 Tauri 异步运行时做 sqlx 入库与事件 emit。
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,6 +21,7 @@ use super::app_store::AppIconStore;
 use super::apps_registry::AppsRegistry;
 use super::guard::WritebackGuard;
 use super::ingest::build_item_with_settings;
+use super::pause::WatcherPause;
 use super::read::ClipboardReader;
 use super::sound;
 use super::source::{self, FrontmostApp};
@@ -60,21 +60,6 @@ fn read_with_retry<T, E>(
         result = read();
     }
     result
-}
-
-/// 监听暂停开关。托盘菜单「停止监听」翻转，handler 早返回跳过整条入库链路。
-/// 用 `Arc<AtomicBool>` 跨线程共享；不停 watcher 线程本身，避免反复重建平台句柄。
-#[derive(Debug, Default, Clone)]
-pub struct WatcherPause(Arc<AtomicBool>);
-
-impl WatcherPause {
-    pub fn is_paused(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
-    }
-
-    pub fn set_paused(&self, paused: bool) {
-        self.0.store(paused, Ordering::Relaxed);
-    }
 }
 
 /// 把同步抓到的 [`FrontmostApp`] 落 icon 字节 + 拼成可入库的 [`ClipboardApp`]。
@@ -329,6 +314,13 @@ impl ClipboardHandler for ClipboardChangeHandler {
         }
 
         if super::is_excluded_by_pattern(&settings.clipboard.filters.excluded_patterns, &item) {
+            return;
+        }
+
+        // 「忽略下一次复制」只消费会入库的外部复制：自身写回与被规则排除的内容不占用这次机会。
+        if self.pause.take_skip_next() {
+            log::info!("clipboard watcher: skipped one copy by request");
+            super::pause::notify_pause_changed(&self.app);
             return;
         }
 

@@ -59,6 +59,7 @@ Current high-value events:
 | `window://visibility` | `window/mod.rs` | Clipboard focus/search and dormant refresh gates |
 | `window://lifecycle` and `window://before-destroy` | `window/lifecycle/mod.rs` | Window lifecycle mirror and destroy protection |
 | `keyboard://nav` | `keyboard/windows.rs` | `useKeyboardEvent` on Windows clipboard window |
+| `clipboard://pause-changed` | `clipboard/pause.rs` (tray, commands, timed-pause expiry, skip-next consumption) | `ListeningToggle` in the clipboard header |
 | `backup://received` | `backup/mod.rs` | Preference backup import flow |
 
 When adding an event, define the payload shape in Rust and in TypeScript near

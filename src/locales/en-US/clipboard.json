@@ -52,6 +52,18 @@
   },
   "header": {
     "clearRecords": "Clear records",
+    "listening": {
+      "cancelSkipNext": "Cancel ignore next copy",
+      "pause": "Pause listening",
+      "pause5": "Pause for 5 minutes",
+      "pause30": "Pause for 30 minutes",
+      "pause60": "Pause for 1 hour",
+      "pausedForever": "Listening is paused. Click to resume",
+      "pausedUntil": "Paused until {{time}}. Click to resume",
+      "pauseForever": "Until resumed",
+      "skipNext": "Ignore next copy",
+      "skipNextActive": "The next copy will not be recorded"
+    },
     "logoAlt": "EcoPaste logo",
     "moreActions": "More actions",
     "openPreference": "Preferences",

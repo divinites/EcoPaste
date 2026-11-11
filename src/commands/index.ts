@@ -1478,3 +1478,46 @@ export const hideContextMenus = async () => {
     log.error("hide context menus failed", toAppError(error));
   }
 };
+
+/**
+ * 剪贴板监听的用户暂停状态；`until` 为定时暂停的 ISO 恢复时间。
+ */
+export interface ClipboardPauseState {
+  paused: boolean;
+  until: string | null;
+  skipNext: boolean;
+}
+
+/**
+ * 读取监听暂停状态；后续变化走 `clipboard://pause-changed` 事件。
+ */
+export const getClipboardPauseState = () => {
+  return call<ClipboardPauseState>(
+    TAURI_COMMAND.GET_CLIPBOARD_PAUSE_STATE,
+    "commands:labels.pauseListening",
+  );
+};
+
+/**
+ * 暂停 / 恢复监听：`null` 恢复，`0` 直到手动恢复，其余为暂停分钟数。
+ */
+export const setClipboardPause = (minutes: number | null) => {
+  return call<ClipboardPauseState>(
+    TAURI_COMMAND.SET_CLIPBOARD_PAUSE,
+    minutes === null
+      ? "commands:labels.resumeListening"
+      : "commands:labels.pauseListening",
+    { minutes },
+  );
+};
+
+/**
+ * 设置 / 取消「忽略下一次复制」。
+ */
+export const setClipboardSkipNext = (skip: boolean) => {
+  return call<ClipboardPauseState>(
+    TAURI_COMMAND.SET_CLIPBOARD_SKIP_NEXT,
+    "commands:labels.skipNextCopy",
+    { skip },
+  );
+};
