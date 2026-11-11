@@ -173,6 +173,7 @@ export interface Feedback {
 
 export interface Filters {
   excludedAppIds: string[];
+  excludedPatterns: string[];
 }
 
 export interface OnboardingLegacyImport {

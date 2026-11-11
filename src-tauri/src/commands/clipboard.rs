@@ -12,11 +12,12 @@ use tauri_plugin_dialog::DialogExt;
 use crate::clipboard::{
     add_app_from_path, build_clipboard_app_view, build_clipboard_preview_payload,
     build_item_with_settings, default_saved_image_file_name, delete_unreferenced_apps,
-    detect_frontmost, enrich_list_item, materialize_source, merge_clipboard_apps,
-    normalize_group_icon, normalize_group_name, normalize_group_svg, persist_and_notify,
-    refresh_running_apps, resolve_file_icon_path, sort_clipboard_apps, validate_image_file_name,
-    AppIconStore, AppsRegistry, ClipboardAppView, ClipboardPreviewPayload, ClipboardReader,
-    FileIconStore, ImageStore, ListItemContext, WritebackGuard, MAX_GROUP_ICON_BYTES,
+    detect_frontmost, enrich_list_item, is_excluded_by_pattern, materialize_source,
+    merge_clipboard_apps, normalize_group_icon, normalize_group_name, normalize_group_svg,
+    persist_and_notify, refresh_running_apps, resolve_file_icon_path, sort_clipboard_apps,
+    validate_image_file_name, AppIconStore, AppsRegistry, ClipboardAppView,
+    ClipboardPreviewPayload, ClipboardReader, FileIconStore, ImageStore, ListItemContext,
+    WritebackGuard, MAX_GROUP_ICON_BYTES,
 };
 use crate::core::{AppError, Result};
 use crate::db::items::{
@@ -96,7 +97,10 @@ pub async fn read_clipboard(
                 settings.clipboard.content.copy_plain,
             )?,
             None => None,
-        };
+        }
+        .filter(|item| {
+            !is_excluded_by_pattern(&settings.clipboard.filters.excluded_patterns, item)
+        });
         (item, source)
         // reader 在此 drop，!Send 句柄不跨下方 await。
     };

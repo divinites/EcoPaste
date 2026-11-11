@@ -131,6 +131,15 @@ export const preferenceTabs: PreferenceTab[] = [
               return settings.clipboard.filters.excludedAppIds;
             },
           },
+          {
+            control: { type: "textarea" },
+            id: "source.excludedPatterns",
+            keywords: ["exclude", "ignore", "regex", "pattern", "content"],
+            path: ["clipboard", "filters", "excludedPatterns"],
+            value: (settings) => {
+              return settings.clipboard.filters.excludedPatterns;
+            },
+          },
         ],
       },
       {

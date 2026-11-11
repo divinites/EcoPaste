@@ -37,5 +37,6 @@ pub fn label(key: Key) -> &'static str {
         Key::BackupDatabaseMissing => "The backup file is missing the history database",
         Key::BackupSettingsMissing => "The backup file is missing the settings file",
         Key::BackupVersionUnsupported => "This backup format version is not supported",
+        Key::FilterPatternInvalid => "Exclusion rule is not a valid regular expression",
     }
 }

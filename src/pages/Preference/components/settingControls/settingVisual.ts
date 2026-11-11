@@ -69,6 +69,7 @@ const SETTING_ICON_MAP: Record<string, string> = {
   "shortcuts.openPreference": "i-lucide:settings",
   "shortcuts.winV": "i-lucide:clipboard-list",
   "source.excludedApps": "i-lucide:shield-ban",
+  "source.excludedPatterns": "i-lucide:regex",
   "updates.autoCheck": "i-lucide:refresh-cw",
   "updates.beta": "i-lucide:flask-conical",
   "updates.frequency": "i-lucide:calendar-sync",

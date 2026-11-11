@@ -131,7 +131,7 @@
         "title": "隐私保护"
       },
       "source": {
-        "title": "应用过滤"
+        "title": "应用与内容过滤"
       },
       "updates": {
         "title": "更新"
@@ -561,6 +561,11 @@
         "excludedApps": {
           "description": "从这些应用复制的内容不会进入历史。",
           "title": "忽略应用"
+        },
+        "excludedPatterns": {
+          "description": "每行一个正则表达式；文本内容或文件路径命中任意一条时不保存到历史。",
+          "placeholder": "例如：^\\d{6}$\n验证码",
+          "title": "忽略内容规则"
         }
       },
       "updates": {

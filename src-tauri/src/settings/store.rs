@@ -190,6 +190,7 @@ fn write_atomic(path: &Path, settings: &Settings) -> Result<()> {
 fn validate_settings(settings: &Settings) -> Result<()> {
     validate_window_open_group(&settings.clipboard.window.select_group_on_open)?;
     validate_dock_height_percent(settings.clipboard.window.dock_height_percent)?;
+    crate::clipboard::validate_excluded_patterns(&settings.clipboard.filters.excluded_patterns)?;
 
     let open_clipboard = normalize_shortcut_value(&settings.shortcuts.open_clipboard);
     let open_preference = normalize_shortcut_value(&settings.shortcuts.open_preference);

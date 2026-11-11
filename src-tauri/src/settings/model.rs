@@ -272,18 +272,21 @@ impl Default for Sensitive {
     }
 }
 
-/// 应用过滤规则。
-/// `excluded_app_ids` 命中复制来源时，对应剪贴板内容不入库。
+/// 应用与内容过滤规则。
+/// `excluded_app_ids` 命中复制来源时，对应剪贴板内容不入库；
+/// `excluded_patterns` 为正则，命中文本内容或文件路径时不入库。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Filters {
     pub excluded_app_ids: Vec<String>,
+    pub excluded_patterns: Vec<String>,
 }
 
 impl Default for Filters {
     fn default() -> Self {
         Self {
             excluded_app_ids: default_excluded_app_ids(),
+            excluded_patterns: Vec::new(),
         }
     }
 }

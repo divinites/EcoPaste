@@ -39,5 +39,6 @@ pub fn label(key: Key) -> &'static str {
         Key::BackupDatabaseMissing => "备份文件缺少历史数据库",
         Key::BackupSettingsMissing => "备份文件缺少设置文件",
         Key::BackupVersionUnsupported => "暂不支持该备份格式版本",
+        Key::FilterPatternInvalid => "排除规则不是有效的正则表达式",
     }
 }

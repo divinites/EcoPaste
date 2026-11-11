@@ -131,7 +131,7 @@
         "title": "Privacy"
       },
       "source": {
-        "title": "App Filters"
+        "title": "App & Content Filters"
       },
       "updates": {
         "title": "Updates"
@@ -561,6 +561,11 @@
         "excludedApps": {
           "description": "Content copied from these apps will not be saved to history.",
           "title": "Ignored Apps"
+        },
+        "excludedPatterns": {
+          "description": "One regular expression per line. Text or file paths matching any rule are not saved to history.",
+          "placeholder": "e.g. ^\\d{6}$\nverification code",
+          "title": "Ignored Content Rules"
         }
       },
       "updates": {

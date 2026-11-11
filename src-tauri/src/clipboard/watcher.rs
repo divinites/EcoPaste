@@ -328,6 +328,10 @@ impl ClipboardHandler for ClipboardChangeHandler {
             return;
         }
 
+        if super::is_excluded_by_pattern(&settings.clipboard.filters.excluded_patterns, &item) {
+            return;
+        }
+
         let source_app =
             source.map(|src| materialize_source(&self.app_icon_store, Some(&self.registry), src));
         if let Some(src) = &source_app {

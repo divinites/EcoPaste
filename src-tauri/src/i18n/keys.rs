@@ -55,6 +55,7 @@ pub enum CommandKey {
     BackupDatabaseMissing,
     BackupSettingsMissing,
     BackupVersionUnsupported,
+    FilterPatternInvalid,
 }
 
 #[derive(Debug, Clone, Copy)]

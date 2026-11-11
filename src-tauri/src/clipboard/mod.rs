@@ -1,6 +1,7 @@
 mod app_store;
 mod apps_registry;
 mod cleanup;
+mod content_filter;
 mod detect;
 mod file_icon_store;
 mod groups;
@@ -21,6 +22,7 @@ pub use app_store::AppIconStore;
 pub use apps_registry::{
     add_app_from_path, delete_unreferenced_apps, refresh_running_apps, AppsRegistry,
 };
+pub use content_filter::{is_excluded_by_pattern, validate_excluded_patterns};
 pub use detect::sanitize_css_color;
 pub use file_icon_store::FileIconStore;
 pub use groups::{
