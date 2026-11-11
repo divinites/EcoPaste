@@ -240,7 +240,9 @@ async fn switch_storage_location(
 
 fn reject_nested_storage_move(current: &Path, target: &Path) -> Result<()> {
     if target.starts_with(current) || current.starts_with(target) {
-        return Err(anyhow::anyhow!("新旧数据目录不能互相包含").into());
+        return Err(crate::core::AppError::localized(
+            crate::i18n::commands::Key::StorageDirsNested,
+        ));
     }
 
     Ok(())

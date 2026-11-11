@@ -141,14 +141,16 @@ pub async fn import_legacy_data(
     types: Vec<LegacyImportSelection>,
 ) -> Result<OnboardingLegacyImportResult> {
     if types.is_empty() {
-        return Err(AppError::Clipboard("请至少选择一种导入类型".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::LegacyImportTypeRequired,
+        ));
     }
 
     let detection = inspect_legacy_data().await?;
     let db_path = detection
         .importable_database
         .clone()
-        .ok_or_else(|| AppError::Clipboard("未找到可导入的旧版数据库".to_owned()))?;
+        .ok_or_else(|| AppError::localized(crate::i18n::commands::Key::LegacyDatabaseMissing))?;
     let legacy_db_path = PathBuf::from(&db_path);
     let legacy_pool = open_legacy_pool(&legacy_db_path).await?;
     let db = app.state::<DatabaseState>();

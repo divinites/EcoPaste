@@ -45,6 +45,7 @@ impl SettingsStore {
             }
         };
         log::info!("settings store ready at {path:?}");
+        crate::i18n::set_active_language(current.appearance.language);
 
         Ok(Self {
             path: RwLock::new(path),
@@ -62,6 +63,7 @@ impl SettingsStore {
 
         let path = self.path();
         write_atomic(&path, &next)?;
+        crate::i18n::set_active_language(next.appearance.language);
         *self.current.write().expect("settings poisoned") = next.clone();
         Ok(next)
     }
@@ -88,6 +90,7 @@ impl SettingsStore {
 
         let path = self.path();
         write_atomic(&path, &next)?;
+        crate::i18n::set_active_language(next.appearance.language);
         *guard = next.clone();
         Ok(next)
     }
@@ -103,6 +106,7 @@ impl SettingsStore {
 
         let path = self.path();
         write_atomic(&path, &next)?;
+        crate::i18n::set_active_language(next.appearance.language);
         *self.current.write().expect("settings poisoned") = next.clone();
         Ok(next)
     }
@@ -122,6 +126,7 @@ impl SettingsStore {
         };
 
         *self.path.write().expect("settings path poisoned") = path;
+        crate::i18n::set_active_language(current.appearance.language);
         *self.current.write().expect("settings poisoned") = current.clone();
         Ok(current)
     }

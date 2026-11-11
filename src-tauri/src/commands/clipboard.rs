@@ -180,7 +180,7 @@ pub async fn save_clipboard_image_to_file(
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
-        .ok_or_else(|| AppError::Clipboard(format!("clipboard item not found: {id}")))?;
+        .ok_or_else(|| item_not_found(&id))?;
 
     if item.kind != ClipboardKind::Image {
         return Err(AppError::Clipboard(
@@ -374,7 +374,7 @@ pub async fn write_to_clipboard(
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
-        .ok_or_else(|| AppError::Clipboard(format!("clipboard item not found: {id}")))?;
+        .ok_or_else(|| item_not_found(&id))?;
 
     let settings = app.state::<SettingsStore>().snapshot();
     let write_plain =
@@ -412,7 +412,7 @@ pub async fn paste_clipboard_item(
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
-        .ok_or_else(|| AppError::Clipboard(format!("clipboard item not found: {id}")))?;
+        .ok_or_else(|| item_not_found(&id))?;
 
     let settings = app.state::<SettingsStore>().snapshot();
     let write_plain = should_write_plain_for_paste(
@@ -1186,11 +1186,15 @@ fn sort_clipboard_apps(apps: &mut [ClipboardApp]) {
 fn normalize_group_name(name: &str) -> Result<String> {
     let normalized = name.trim();
     if normalized.is_empty() {
-        return Err(AppError::Clipboard("分组名称不能为空".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::GroupNameEmpty,
+        ));
     }
 
     if normalized.chars().count() > MAX_GROUP_NAME_CHARS {
-        return Err(AppError::Clipboard("分组名称不能超过 32 个字符".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::GroupNameTooLong,
+        ));
     }
 
     Ok(normalized.to_owned())
@@ -1204,7 +1208,9 @@ fn normalize_group_icon(icon: &str) -> Result<String> {
     }
 
     if normalized.len() > MAX_GROUP_ICON_BYTES {
-        return Err(AppError::Clipboard("SVG 图标不能超过 256 KB".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::GroupIconTooLarge,
+        ));
     }
 
     if normalized.starts_with("<svg") {
@@ -1218,13 +1224,15 @@ fn normalize_group_icon(icon: &str) -> Result<String> {
 fn normalize_group_svg(icon: &str) -> Result<()> {
     let normalized = icon.trim_start();
     if !normalized.starts_with("<svg") {
-        return Err(AppError::Clipboard("请选择有效的 SVG 图标".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::GroupIconInvalid,
+        ));
     }
 
     let lower = normalized.to_ascii_lowercase();
     if lower.contains("<script") || lower.contains("<foreignobject") {
-        return Err(AppError::Clipboard(
-            "SVG 图标不能包含脚本或 foreignObject".to_owned(),
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::GroupIconUnsafe,
         ));
     }
 
@@ -1331,17 +1339,22 @@ pub async fn import_clipboard_group_svg(path: String) -> Result<String> {
         .unwrap_or_default()
         .to_ascii_lowercase();
     if extension != "svg" {
-        return Err(AppError::Clipboard("请选择 SVG 文件".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::SvgFileRequired,
+        ));
     }
 
-    let bytes = std::fs::read(path)
-        .map_err(|err| AppError::Clipboard(format!("无法读取 SVG 文件：{err}")))?;
+    let bytes = std::fs::read(path).map_err(|err| {
+        AppError::localized_with(crate::i18n::commands::Key::SvgFileUnreadable, err)
+    })?;
     if bytes.len() > MAX_GROUP_ICON_BYTES {
-        return Err(AppError::Clipboard("SVG 文件不能超过 256 KB".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::GroupIconTooLarge,
+        ));
     }
 
     let icon = String::from_utf8(bytes)
-        .map_err(|_| AppError::Clipboard("SVG 文件必须是 UTF-8 文本".to_owned()))?;
+        .map_err(|_| AppError::localized(crate::i18n::commands::Key::SvgFileNotUtf8))?;
     normalize_group_svg(&icon)?;
 
     Ok(icon)
@@ -1478,7 +1491,9 @@ pub async fn update_clipboard_item_group(
         .iter()
         .any(|group| group.id == group_id);
     if !exists {
-        return Err(AppError::Clipboard("分组不存在".to_owned()));
+        return Err(AppError::localized(
+            crate::i18n::commands::Key::GroupNotFound,
+        ));
     }
 
     crate::db::items::update_item_group(&pool, &id, Some(&group_id)).await
@@ -1499,7 +1514,7 @@ pub async fn open_clipboard_item_link(
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
-        .ok_or_else(|| AppError::Clipboard(format!("clipboard item not found: {id}")))?;
+        .ok_or_else(|| item_not_found(&id))?;
 
     let value = item.content.trim();
     if value.is_empty() {
@@ -1531,7 +1546,7 @@ pub async fn reveal_clipboard_item(
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
-        .ok_or_else(|| AppError::Clipboard(format!("clipboard item not found: {id}")))?;
+        .ok_or_else(|| item_not_found(&id))?;
 
     let target = if item.kind == ClipboardKind::Files {
         item.content
@@ -1550,6 +1565,12 @@ pub async fn reveal_clipboard_item(
     app.opener()
         .reveal_item_in_dir(&target)
         .map_err(|err| AppError::Clipboard(err.to_string()))
+}
+
+/// 记录已被删除 / 清理时的用户可见错误；id 只写日志。
+fn item_not_found(id: &str) -> AppError {
+    log::warn!("clipboard item not found: {id}");
+    AppError::localized(crate::i18n::commands::Key::ClipboardItemNotFound)
 }
 
 /// 校验图片文件名：必须是单层 `<name>.png`，不含路径分隔符 / 父目录引用。

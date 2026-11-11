@@ -26,6 +26,7 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::core::{AppError, Result};
+use crate::i18n::commands::Key;
 
 pub const BACKUP_EXTENSION: &str = "ecopastebak";
 pub const BACKUP_RECEIVED_EVENT: &str = "backup://received";
@@ -405,10 +406,10 @@ fn validate_password_options(
     match options.mode {
         BackupExportMode::Encrypted => {
             let Some(password) = options.password.as_ref() else {
-                return app_error("请输入备份密码");
+                return localized_error(Key::BackupPasswordRequired);
             };
             if password.chars().count() < 8 {
-                return app_error("备份密码至少需要 8 个字符");
+                return localized_error(Key::BackupPasswordTooShort);
             }
 
             Ok(Some(Zeroizing::new(password.clone())))
@@ -419,7 +420,7 @@ fn validate_password_options(
                 .as_deref()
                 .is_some_and(|value| !value.is_empty())
             {
-                return app_error("明文备份不应包含密码");
+                return localized_error(Key::BackupPlainWithPassword);
             }
 
             Ok(None)
@@ -435,7 +436,7 @@ fn validate_import_options(
     match inspect_backup_file(&path)? {
         BackupContainerMode::Encrypted => {
             if input.password.as_deref().is_none_or(str::is_empty) {
-                return app_error("请输入备份密码");
+                return localized_error(Key::BackupPasswordRequired);
             }
         }
         BackupContainerMode::Plain => {
@@ -444,7 +445,7 @@ fn validate_import_options(
                 .as_deref()
                 .is_some_and(|value| !value.is_empty())
             {
-                return app_error("明文备份不应包含密码");
+                return localized_error(Key::BackupPlainWithPassword);
             }
         }
     }
@@ -454,12 +455,12 @@ fn validate_import_options(
 
 fn normalize_backup_path(path: PathBuf) -> Result<PathBuf> {
     if path.as_os_str().is_empty() {
-        return app_error("请选择备份保存位置");
+        return localized_error(Key::BackupTargetRequired);
     }
 
     match path.extension().and_then(|value| value.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case(BACKUP_EXTENSION) => Ok(path),
-        Some(_) => app_error(format!("备份文件后缀必须是 .{BACKUP_EXTENSION}")),
+        Some(_) => localized_error(Key::BackupExtensionInvalid),
         None => Ok(path.with_extension(BACKUP_EXTENSION)),
     }
 }
@@ -469,7 +470,7 @@ fn ensure_backup_extension(path: &Path) -> Result<()> {
         return Ok(());
     }
 
-    app_error(format!("请选择 .{BACKUP_EXTENSION} 备份文件"))
+    localized_error(Key::BackupFileRequired)
 }
 
 async fn checkpoint_database(pool: &SqlitePool) -> Result<()> {
@@ -830,7 +831,7 @@ fn read_backup_payload(path: &Path, password: Option<&str>) -> Result<Vec<u8>> {
         return Ok(bytes);
     }
     if !bytes.starts_with(MAGIC) {
-        return app_error("不是有效的 EcoPaste 备份文件");
+        return localized_error(Key::BackupInvalidFile);
     }
 
     let mut cursor = Cursor::new(bytes.as_slice());
@@ -838,13 +839,13 @@ fn read_backup_payload(path: &Path, password: Option<&str>) -> Result<Vec<u8>> {
     let header = read_container_header_after_magic(&mut cursor)?;
     let ciphertext_start = cursor.position() as usize;
     let Some(kdf) = header.kdf else {
-        return app_error("加密备份文件头无效");
+        return localized_error(Key::BackupHeaderInvalid);
     };
     let Some(cipher) = header.cipher else {
-        return app_error("加密备份文件头无效");
+        return localized_error(Key::BackupHeaderInvalid);
     };
     let Some(password) = password else {
-        return app_error("请输入备份密码");
+        return localized_error(Key::BackupPasswordRequired);
     };
 
     decrypt_payload(&bytes[ciphertext_start..], password, &kdf, &cipher)
@@ -857,10 +858,10 @@ fn decrypt_payload(
     cipher_header: &CipherHeader,
 ) -> Result<Vec<u8>> {
     if kdf.algorithm != "argon2id" || cipher_header.algorithm != "xchacha20poly1305" {
-        return app_error("暂不支持该备份加密格式");
+        return localized_error(Key::BackupEncryptionUnsupported);
     }
     if kdf.salt.len() != SALT_LEN || cipher_header.nonce.len() != NONCE_LEN {
-        return app_error("加密备份文件头无效");
+        return localized_error(Key::BackupHeaderInvalid);
     }
 
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
@@ -883,7 +884,7 @@ fn decrypt_payload(
     let nonce = XNonce::from(nonce);
     cipher
         .decrypt(&nonce, ciphertext)
-        .map_err(|_| AppError::Other(anyhow!("备份密码不正确或文件已损坏")))
+        .map_err(|_| AppError::localized(Key::BackupPasswordWrong))
 }
 
 fn extract_payload_zip(payload: &[u8]) -> Result<TempDir> {
@@ -899,17 +900,17 @@ fn extract_payload_zip(payload: &[u8]) -> Result<TempDir> {
 
 fn validate_extracted_payload(root: &Path) -> Result<()> {
     if !root.join(MANIFEST_FILENAME).exists() {
-        return app_error("备份文件缺少 manifest.json");
+        return localized_error(Key::BackupManifestMissing);
     }
     if !root.join(DB_ARCHIVE_DIR).join(DB_FILENAME).exists() {
-        return app_error("备份文件缺少历史数据库");
+        return localized_error(Key::BackupDatabaseMissing);
     }
     if !root
         .join(CONFIG_ARCHIVE_DIR)
         .join(SETTINGS_FILENAME)
         .exists()
     {
-        return app_error("备份文件缺少设置文件");
+        return localized_error(Key::BackupSettingsMissing);
     }
 
     Ok(())
@@ -928,7 +929,7 @@ fn inspect_backup_reader<R: Read>(reader: &mut R) -> Result<BackupContainerMode>
         return Ok(BackupContainerMode::Plain);
     }
 
-    app_error("不是有效的 EcoPaste 备份文件")
+    localized_error(Key::BackupInvalidFile)
 }
 
 fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<ContainerHeader> {
@@ -938,7 +939,7 @@ fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<Containe
         .context("failed to read backup header length")?;
     let header_len = u32::from_le_bytes(len) as usize;
     if header_len == 0 || header_len > 64 * 1024 {
-        return app_error("备份文件头无效");
+        return localized_error(Key::BackupHeaderInvalid);
     }
 
     let mut header = vec![0u8; header_len];
@@ -948,7 +949,7 @@ fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<Containe
     let header: ContainerHeader =
         serde_json::from_slice(&header).context("failed to parse backup header")?;
     if header.format_version != FORMAT_VERSION {
-        return app_error("暂不支持该备份格式版本");
+        return localized_error(Key::BackupVersionUnsupported);
     }
 
     Ok(header)
@@ -1446,6 +1447,10 @@ fn dir_size(path: &Path) -> Result<u64> {
     }
 
     Ok(total)
+}
+
+fn localized_error<T>(key: Key) -> Result<T> {
+    Err(AppError::localized(key))
 }
 
 fn app_error<T>(message: impl Into<String>) -> Result<T> {
